@@ -1,0 +1,154 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Baròmetres CEO</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap">
+<style>
+/* Layout: listado cronológico por año, una fila por barómetro */
+:root { --bg:#f3f5f7; --panel:#fff; --ink:#16202b; --muted:#5b6876; --line:#d9dfe5; --soft:#e9edf1; --accent:#23408e;
+  --f-display:"Source Serif 4",Georgia,serif; --f-body:"IBM Plex Sans",system-ui,sans-serif; --f-mono:"IBM Plex Mono",ui-monospace,monospace; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#11161c; --panel:#182029; --ink:#e6ebf0; --muted:#9aa7b4; --line:#2b3642; --soft:#212b36; --accent:#8fa9f0; color-scheme:dark; } }
+:root[data-theme="dark"] { --bg:#11161c; --panel:#182029; --ink:#e6ebf0; --muted:#9aa7b4; --line:#2b3642; --soft:#212b36; --accent:#8fa9f0; color-scheme:dark; }
+body { background:var(--bg); color:var(--ink); font-family:var(--f-body); font-size:14px; line-height:1.5; margin:0;
+  padding-left:max(16px,env(safe-area-inset-left,0px)); padding-right:max(16px,env(safe-area-inset-right,0px)); padding-block:28px 48px; }
+.wrap { max-width:980px; margin:0 auto; display:grid; gap:28px; }
+h1,h2 { font-family:var(--f-display); font-weight:600; margin:0; text-wrap:balance; }
+h1 { font-size:2.1rem; line-height:1.1; } h2 { font-size:1.2rem; }
+.mono { font-family:var(--f-mono); } .muted { color:var(--muted); }
+.eyebrow { display:block; font-size:.68rem; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:600; }
+.lead { max-width:68ch; color:var(--muted); margin:6px 0 0; }
+.yr { display:grid; grid-template-columns:80px minmax(0,1fr); gap:16px; align-items:start; }
+@media (max-width:620px) { .yr { grid-template-columns:minmax(0,1fr); gap:8px; } }
+.cards { display:grid; gap:6px; }
+.card { display:grid; grid-template-columns:56px minmax(0,1fr) 130px 110px; gap:12px; align-items:center; text-decoration:none; color:inherit;
+  background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 14px; font-variant-numeric:tabular-nums; }
+.card:hover { border-color:var(--accent); } .card:focus-visible { outline:2px solid var(--accent); }
+.card .num { font-size:1.05rem; color:var(--accent); font-weight:500; }
+.card .t { display:grid; min-width:0; } .card .t .muted { font-size:.82rem; }
+.card .ref { font-size:.85rem; }
+@media (max-width:620px) { .card { grid-template-columns:48px minmax(0,1fr); } .card .ref { grid-column:2; } }
+.method { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:16px 18px; }
+.method p, .method li { max-width:75ch; } .note { font-size:.85rem; color:var(--muted); }
+</style></head><body><div class="wrap">
+<header><span class="eyebrow">Centre d'Estudis d'Opinió · Baròmetres d'Opinió Política</span><h1>Baròmetres CEO</h1>
+<p class="lead">24 barómetros entre 2017 y 2025. Cada uno tiene su propia página con todas sus variables, cruces, gráficos y la ponderación por recuerdo de voto aplicada con el mismo criterio.</p></header>
+<section class="yr"><h2>2025</h2><div class="cards"><a class="card" href="encuestas/bop_1145.html">
+  <span class="num mono">1145</span>
+  <span class="t"><b>Baròmetre 3a onada 2025</b><span class="muted">Campo octubre 2025 · N 2.000 · 214 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2024</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.762 <span class="muted">(88%)</span></span>
+</a><a class="card" href="encuestas/bop_1126.html">
+  <span class="num mono">1126</span>
+  <span class="t"><b>Baròmetre 2a onada 2025</b><span class="muted">Campo junio 2025 · N 2.000 · 188 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2024</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.733 <span class="muted">(87%)</span></span>
+</a><a class="card" href="encuestas/bop_1119.html">
+  <span class="num mono">1119</span>
+  <span class="t"><b>Baròmetre 1a onada 2025</b><span class="muted">Campo febrero 2025 · N 2.000 · 206 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2024</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.820 <span class="muted">(91%)</span></span>
+</a></div></section><section class="yr"><h2>2024</h2><div class="cards"><a class="card" href="encuestas/bop_1112.html">
+  <span class="num mono">1112</span>
+  <span class="t"><b>Baròmetre 3a onada 2024</b><span class="muted">Campo octubre 2024 · N 2.000 · 243 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2024</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.781 <span class="muted">(89%)</span></span>
+</a><a class="card" href="encuestas/bop_1101.html">
+  <span class="num mono">1101</span>
+  <span class="t"><b>Baròmetre 2a onada 2024</b><span class="muted">Campo junio 2024 · N 2.000 · 213 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2024</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.645 <span class="muted">(82%)</span></span>
+</a><a class="card" href="encuestas/bop_1082.html">
+  <span class="num mono">1082</span>
+  <span class="t"><b>Baròmetre 1a onada 2024</b><span class="muted">Campo febrero 2024 · N 2.000 · 216 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2021</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.646 <span class="muted">(82%)</span></span>
+</a></div></section><section class="yr"><h2>2023</h2><div class="cards"><a class="card" href="encuestas/bop_1071.html">
+  <span class="num mono">1071</span>
+  <span class="t"><b>Baròmetre 3a onada 2023</b><span class="muted">Campo octubre 2023 · N 2.000 · 268 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2021</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.619 <span class="muted">(81%)</span></span>
+</a><a class="card" href="encuestas/bop_1061.html">
+  <span class="num mono">1061</span>
+  <span class="t"><b>Baròmetre 2a onada 2023</b><span class="muted">Campo junio 2023 · N 2.000 · 274 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2021</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.578 <span class="muted">(79%)</span></span>
+</a><a class="card" href="encuestas/bop_1050.html">
+  <span class="num mono">1050</span>
+  <span class="t"><b>Baròmetre 1a onada 2023</b><span class="muted">Campo marzo 2023 · N 2.000 · 227 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2021</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.648 <span class="muted">(82%)</span></span>
+</a></div></section><section class="yr"><h2>2022</h2><div class="cards"><a class="card" href="encuestas/bop_1035.html">
+  <span class="num mono">1035</span>
+  <span class="t"><b>Baròmetre 3a onada 2022</b><span class="muted">Campo octubre 2022 · N 2.000 · 264 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2021</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.623 <span class="muted">(81%)</span></span>
+</a><a class="card" href="encuestas/bop_1031.html">
+  <span class="num mono">1031</span>
+  <span class="t"><b>Baròmetre 2a onada 2022</b><span class="muted">Campo junio 2022 · N 2.000 · 202 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2021</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.670 <span class="muted">(84%)</span></span>
+</a><a class="card" href="encuestas/bop_1019.html">
+  <span class="num mono">1019</span>
+  <span class="t"><b>Baròmetre 1a onada 2022</b><span class="muted">Campo marzo 2022 · N 2.000 · 193 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2021</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.681 <span class="muted">(84%)</span></span>
+</a></div></section><section class="yr"><h2>2020</h2><div class="cards"><a class="card" href="encuestas/bop_985.html">
+  <span class="num mono">985</span>
+  <span class="t"><b>Baròmetre 3a onada 2020</b><span class="muted">Campo octubre 2020 · N 2.000 · 365 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2017</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.433 <span class="muted">(72%)</span></span>
+</a><a class="card" href="encuestas/bop_974.html">
+  <span class="num mono">974</span>
+  <span class="t"><b>Baròmetre 2a onada 2020</b><span class="muted">Campo julio 2020 · N 2.000 · 366 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2017</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.465 <span class="muted">(73%)</span></span>
+</a><a class="card" href="encuestas/bop_962.html">
+  <span class="num mono">962</span>
+  <span class="t"><b>Baròmetre 1a onada 2020</b><span class="muted">Campo febrero 2020 · N 2.000 · 342 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2017</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.585 <span class="muted">(79%)</span></span>
+</a></div></section><section class="yr"><h2>2019</h2><div class="cards"><a class="card" href="encuestas/bop_954.html">
+  <span class="num mono">954</span>
+  <span class="t"><b>Baròmetre 3a onada 2019</b><span class="muted">Campo noviembre 2019 · N 1.500 · 359 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2017</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.204 <span class="muted">(80%)</span></span>
+</a><a class="card" href="encuestas/bop_942.html">
+  <span class="num mono">942</span>
+  <span class="t"><b>Baròmetre 2a onada 2019</b><span class="muted">Campo julio 2019 · N 1.500 · 325 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2017</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.163 <span class="muted">(78%)</span></span>
+</a><a class="card" href="encuestas/bop_919.html">
+  <span class="num mono">919</span>
+  <span class="t"><b>Baròmetre 1a onada 2019</b><span class="muted">Campo marzo 2019 · N 1.500 · 344 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2017</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.210 <span class="muted">(81%)</span></span>
+</a></div></section><section class="yr"><h2>2018</h2><div class="cards"><a class="card" href="encuestas/bop_908.html">
+  <span class="num mono">908</span>
+  <span class="t"><b>Baròmetre 3a onada 2018</b><span class="muted">Campo octubre 2018 · N 1.500 · 235 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2017</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.285 <span class="muted">(86%)</span></span>
+</a><a class="card" href="encuestas/bop_901.html">
+  <span class="num mono">901</span>
+  <span class="t"><b>Baròmetre 2a onada 2018</b><span class="muted">Campo julio 2018 · N 1.500 · 271 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2017</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.317 <span class="muted">(88%)</span></span>
+</a><a class="card" href="encuestas/bop_885.html">
+  <span class="num mono">885</span>
+  <span class="t"><b>Baròmetre 1a onada 2018</b><span class="muted">Campo abril 2018 · N 1.500 · 240 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2017</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.202 <span class="muted">(80%)</span></span>
+</a></div></section><section class="yr"><h2>2017</h2><div class="cards"><a class="card" href="encuestas/bop_863.html">
+  <span class="num mono">863</span>
+  <span class="t"><b>Baròmetre 3a onada 2017</b><span class="muted">Campo octubre 2017 · N 1.338 · 228 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2015</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>959 <span class="muted">(72%)</span></span>
+</a><a class="card" href="encuestas/bop_857.html">
+  <span class="num mono">857</span>
+  <span class="t"><b>Baròmetre 2a onada 2017</b><span class="muted">Campo junio 2017 · N 1.500 · 251 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2015</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.314 <span class="muted">(88%)</span></span>
+</a><a class="card" href="encuestas/bop_850.html">
+  <span class="num mono">850</span>
+  <span class="t"><b>Baròmetre 1a onada 2017</b><span class="muted">Campo marzo 2017 · N 1.500 · 367 variables</span></span>
+  <span class="ref"><span class="eyebrow">Recuerdo</span>Parlament 2015</span>
+  <span class="ref"><span class="eyebrow">n efectiva</span>1.339 <span class="muted">(89%)</span></span>
+</a></div></section>
+</div></body></html>
