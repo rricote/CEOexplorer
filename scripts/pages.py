@@ -41,7 +41,7 @@ def page(d):
     <a class="back" href="../index.html">← Todas las encuestas</a>
     <div class="eyebrow">Centre d'Estudis d'Opinió · BOP {i['id']}</div>
     <div class="row" style="justify-content:space-between;gap:12px"><h1>{E(i['titulo'])}</h1>
-      <a class="btn-primary" href="informe_{i['id']}.html">Informe detallado →</a></div>
+      <a class="btn-primary" href="informe_{i['id']}.html">← Volver al informe</a></div>
     <div class="chips">
       <span class="chip">Campo: <b>{E(i['campo'])}</b></span>
       <span class="chip">N = <b>{nf(i['n'])}</b></span>
@@ -127,9 +127,10 @@ def report_page(d):
 </head><body data-mode="informe">
 <div class="wrap" style="max-width:1180px">
   <header class="top">
-    <div class="row" style="gap:16px"><a class="back" href="bop_{i['id']}.html">← Explorador de esta encuesta</a><a class="back" href="../index.html">Todas las encuestas</a></div>
+    <a class="back" href="../index.html">← Todas las encuestas</a>
     <div class="eyebrow">Informe detallado · BOP {i['id']} · campo {E(i['campo'])} · N = {nf(i['n'])}</div>
-    <h1>{E(i['titulo'])}</h1>
+    <div class="row" style="justify-content:space-between;gap:12px"><h1>{E(i['titulo'])}</h1>
+      <a class="btn-primary" href="bop_{i['id']}.html">Explorador de la encuesta →</a></div>
   </header>
   <div class="stickybar" role="toolbar" aria-label="Controles del informe">
     <span class="eyebrow">Controles</span>
@@ -148,12 +149,21 @@ def report_page(d):
       <div id="rep-ideo" style="display:grid;gap:10px"></div>
     </article>
     <section class="panel" style="display:grid;gap:6px">
+      <div><span class="eyebrow">Matriz de transferencias</span><h2>¿Adónde van y de dónde vienen los votos?</h2></div>
+      <p class="note">Cruce entre el recuerdo de voto en las últimas elecciones al Parlament y la intención directa de voto actual.</p>
+    </section>
+    <article class="panel" style="display:grid;gap:12px"><h2>1.1 · Matriz de transferencias</h2><div class="row" id="rep-trm-ctl"></div><div id="rep-trm" style="display:grid;gap:10px"></div></article>
+    <article class="panel" style="display:grid;gap:12px"><h2>1.2 · Transferencia de votos</h2><div class="row" id="rep-trb-ctl"></div><div id="rep-trb" style="display:grid;gap:10px"></div></article>
+    <article class="panel" style="display:grid;gap:12px"><h2>1.3 · Sankey de transferencias</h2><div class="row" id="rep-trs-ctl"></div><div id="rep-trs" style="display:grid;gap:10px"></div></article>
+    <article class="panel" style="display:grid;gap:12px"><h2>1.4 · Matriz de transferencias netas</h2><div class="row" id="rep-trn-ctl"></div><div id="rep-trn" style="display:grid;gap:10px"></div></article>
+    <article class="panel" style="display:grid;gap:12px"><h2>1.5 · Transferencia de votos netas</h2><div class="row" id="rep-trnb-ctl"></div><div id="rep-trnb" style="display:grid;gap:10px"></div></article>
+    <article class="panel" style="display:grid;gap:12px"><h2>1.6 · Sankey de transferencias netas</h2><div class="row" id="rep-trsn-ctl"></div><div id="rep-trsn" style="display:grid;gap:10px"></div></article>
+    <section class="panel" style="display:grid;gap:6px">
       <div><span class="eyebrow">Polarización afectiva</span><h2>¿Se soportan los electorados entre sí?</h2></div>
       <p class="note">Basado en la pregunta «Quins sentiments de simpatia o antipatia li genera la gent que vota…» (0 = molta antipatia, 10 = molta simpatia). La barra de controles superior se mantiene fija mientras bajas.</p>
     </section>
     <article class="panel" style="display:grid;gap:12px"><h2>2 · Matriz de simpatía entre electorados</h2><div id="rep-aff" style="display:grid;gap:10px"></div></article>
     <article class="panel" style="display:grid;gap:12px"><h2>3 · Mapa de bloques y compatibilidad</h2><div id="rep-net" style="display:grid;gap:10px"></div></article>
-    <article class="panel" style="display:grid;gap:12px"><h2>4 · Evolución de la simpatía entre parejas de electorados</h2><div id="rep-evo" style="display:grid;gap:10px"></div></article>
     <section class="panel" style="display:grid;gap:6px">
       <div><span class="eyebrow">Líderes y solidez del voto</span><h2>Duros, blandos, posibles, difíciles e imposibles</h2></div>
       <p class="note">Basado en el capítulo 8 de <i>El arte de ganar</i> (Durán Barba y Nieto): la valoración de los líderes, la ambivalencia frente a rivales y la cercanía de cada elector al perfil del candidato.</p>
@@ -201,7 +211,7 @@ def index(items, standalone):
         rows = ''
         for it in sorted(by[y], key=lambda x: -int(x['id'])):
             k = it['claves']
-            rows += f"""<a class="card" href="encuestas/bop_{it['id']}.html">
+            rows += f"""<a class="card" href="encuestas/informe_{it['id']}.html">
   <span class="num mono">{it['id']}</span>
   <span class="t"><b>{E(it['titulo'])}</b><span class="muted">Campo {E(it['campo'])} · N {nf(it['n'])} · {it['nvars']} variables</span></span>
   <span class="ref"><span class="eyebrow">Recuerdo</span>{E(it['eleccion'])}</span>
@@ -240,7 +250,7 @@ h1 {{ font-size:2.1rem; line-height:1.1; }} h2 {{ font-size:1.2rem; }}
 </style>"""
     body = f"""<div class="wrap">
 <header><span class="eyebrow">Centre d'Estudis d'Opinió · Baròmetres d'Opinió Política</span><h1>Baròmetres CEO</h1>
-<p class="lead">{len(items)} barómetros entre 2017 y 2025. Cada uno tiene su propia página con todas sus variables, cruces, gráficos y la ponderación por recuerdo de voto aplicada con el mismo criterio.</p></header>
+<p class="lead">{len(items)} barómetros entre 2017 y 2025. Cada uno abre su informe detallado y, desde él, el explorador con todas sus variables, cruces y gráficos, con la ponderación por recuerdo de voto aplicada con el mismo criterio.</p></header>
 {cards}
 </div>"""
     if standalone:

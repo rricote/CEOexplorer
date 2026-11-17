@@ -276,8 +276,38 @@
   }
 
 
+  /* ---------- BAI: blanco/nulo, abstención e indecisión agrupados ---------- */
+  const BAI = { on: true };
+  const TRX = { OTROS: ['Otros partidos', '#6f6874'], BLANC: ['Blanco y nulo', '#b8ada1'], ABST: ['Abstención', '#9aa2aa'], NSNC: ['Indecisos / NS-NC', '#1f3a55'], NOP: ['No podía votar', '#c7ccd1'], BAI: ['BAI', '#4d5866'] };
+  const XKEYS = () => BAI.on ? ['BAI'] : ['BLANC', 'ABST', 'NSNC'];
+  function npKey(lab, ns) {
+    if (/blanc|^Nul|\bnul\b/i.test(lab)) return 'BLANC';
+    if (/No votaria|No votar|Abstenci|No va votar|No aniria/i.test(lab)) return 'ABST';
+    if (ns || /No ho sap|No contesta|Ns\s*\/?\s*Nc|NS\/NC|Encara no|Indecis/i.test(lab)) return 'NSNC';
+    if (/podr[ií]a votar|pod[ií]a votar|No podia/i.test(lab)) return 'NOP';
+    return 'OTROS';
+  }
+  const baiMerge = k => BAI.on && (k === 'BLANC' || k === 'ABST' || k === 'NSNC') ? 'BAI' : k;
+  const _ka = {};
+  function keyArr(mode) { // por entrevistado: código de partido o categoría no partidista (BAI unida o separada)
+    const ck = mode + (BAI.on ? '1' : '0'); if (_ka[ck]) return _ka[ck];
+    const out = new Array(N);
+    if (mode === 'rec') {
+      const rv = byName.REC_AGRUPADO, ra = codes(rv), raw = keyOf('rec_cens'), wa = raw ? codes(raw) : null;
+      const rmap = rv.c.map(c => rowcode(c[1]) || (/Abstenci/.test(c[1]) ? 'ABST' : /NS\/NC/.test(c[1]) ? 'NSNC' : /pod[ií]a votar/.test(c[1]) ? 'NOP' : 'MIX'));
+      for (let i = 0; i < N; i++) { let k = ra[i] === 255 ? 'NSNC' : rmap[ra[i]]; if (k === 'MIX') k = wa && wa[i] !== 255 && npKey(raw.c[wa[i]][1], 0) === 'BLANC' ? 'BLANC' : 'OTROS'; out[i] = baiMerge(k); }
+    } else {
+      const iv = keyOf('int_parlament'), ia = codes(iv), imap = iv.c.map(c => rowcode(c[1]) || npKey(c[1], c[2]));
+      for (let i = 0; i < N; i++) out[i] = baiMerge(ia[i] === 255 ? 'NSNC' : imap[ia[i]]);
+    }
+    return (_ka[ck] = out);
+  }
+  const keyName = k => PN[k] ? (I.ref === '2015' && k === 'JXCAT' ? 'JxSí' : PN[k][0]) : TRX[k][0];
+  const keyColor = k => PN[k] ? PN[k][1] : TRX[k][1];
+  const BAINOTE = 'BAI = blanco y nulo + abstención + indecisos (NS/NC).';
+
   /* ---------- Informe detallado (gráficos a medida) ---------- */
-  const RP = { nonvote: true, prop: false, ideoNs: false, shape: 'area', dsmooth: false };
+  const RP = { nonvote: true, prop: false, ideoNs: false, shape: 'area', dsmooth: false, lab: 'col' };
   const NONPARTY = /(Ns\s*\/?\s*Nc|No votaria|No votar|No ho sap|No contesta|No podria|Nul|blanc|^Altres|^Cap|Abstenci)/i;
   // interpolación cúbica monótona (Fritsch–Carlson): curva suave sin rebasar los valores vecinos
   function monotone(xs, ys) {
@@ -298,16 +328,25 @@
       return (2 * t3 - 3 * t2 + 1) * ys[i] + (t3 - 2 * t2 + t) * h * m[i] + (-2 * t3 + 3 * t2) * ys[i + 1] + (t3 - t2) * h * m[i + 1];
     };
   }
+  const shortName = L => L.key === 'BAI' ? 'BAI' : (PN[rowcode(L.c[1])] ? keyName(rowcode(L.c[1])) : L.c[1].replace(/\s*\(.*\)$/, '').slice(0, 18));
   function repIdeoVote() {
     const box = $('#rep-ideo'); if (!box) return;
     const iv = keyOf('ideologia'), pv = keyOf('int_parlament');
     if (!iv || !pv) { box.innerHTML = '<p class="note">Esta encuesta no incluye autoubicación ideológica o intención de voto al Parlament.</p>'; return; }
-    const area = RP.shape === 'area';
+    const area = RP.shape === 'area', lines = RP.shape === 'lines';
     const W = weights(), ia = codes(iv), pa = codes(pv);
     const isNum = c => typeof c[0] === 'number' && c[0] >= 0 && c[0] <= 10 && !c[2];
-    const ik = iv.c.map((c, k) => k).filter(k => isNum(iv.c[k]) || (!area && RP.ideoNs && iv.c[k][2]));
-    const pk = pv.c.map((c, k) => k).filter(k => RP.nonvote || !(pv.c[k][2] || NONPARTY.test(pv.c[k][1])));
-    const iix = {}, pix = {}; ik.forEach((k, j) => iix[k] = j); pk.forEach((k, j) => pix[k] = j);
+    const ik = iv.c.map((c, k) => k).filter(k => isNum(iv.c[k]) || (RP.shape === 'cols' && RP.ideoNs && iv.c[k][2]));
+    const LC = [], pix = {}; // capas del gráfico: partidos, otros y BAI (unida o separada)
+    pv.c.forEach((c, k) => {
+      const party = rowcode(c[1]), np = party ? null : npKey(c[1], c[2]), nonp = !!(c[2] || NONPARTY.test(c[1]) || (np && np !== 'OTROS'));
+      if (!RP.nonvote && nonp) return;
+      const key = np ? baiMerge(np) : null;
+      if (key === 'BAI') { let j = LC.findIndex(x => x.key === 'BAI'); if (j < 0) { j = LC.length; LC.push({ key: 'BAI', c: [-1, 'BAI (blanco, abstención, indecisos)', 0], np: true }); } pix[k] = j; }
+      else { pix[k] = LC.length; LC.push({ key: 'c' + k, c, np: nonp }); }
+    });
+    const pk = LC.map((x, j) => j);
+    const iix = {}; ik.forEach((k, j) => iix[k] = j);
     const J = ik.length;
     let M = pk.map(() => new Float64Array(J)), tot = new Float64Array(J);
     const un = new Float64Array(J), sx = new Float64Array(pk.length), sw = new Float64Array(pk.length);
@@ -324,24 +363,61 @@
       M = M.map(r => Float64Array.from(sm(Array.from(r)))); tot = Float64Array.from(sm(Array.from(tot)));
     }
     const share = (p, j) => tot[j] ? M[p][j] / tot[j] : 0;
+    const rowT = M.map(r => r.reduce((a, b) => a + b, 0));
+    const byP = RP.lab === 'party';
+    const pshare = (p, j) => rowT[p] ? M[p][j] / rowT[p] : 0; // peso de la posición j dentro del total del partido p
+    const shown = (p, j) => byP ? pshare(p, j) : share(p, j);
     const order = pk.map((k, p) => p).sort((x, y) => {
-      const nx = pv.c[pk[x]][2] || NONPARTY.test(pv.c[pk[x]][1]), ny = pv.c[pk[y]][2] || NONPARTY.test(pv.c[pk[y]][1]);
+      const nx = LC[x].np, ny = LC[y].np;
       if (nx !== ny) return nx ? 1 : -1;
       if (nx) return x - y;
       return (sx[x] / (sw[x] || 1)) - (sx[y] / (sw[y] || 1));
     });
-    const cols = colorsFor(pk.map(k => pv.c[k]), pv);
+    const cols = colorsFor(LC.map(x => x.c), pv).map((col, p) => LC[p].key === 'BAI' ? TRX.BAI[1] : col);
     const width = Math.max(340, Math.min(1100, box.clientWidth || 800));
-    const lm = 38, rm = 8, tm = 8, ph = 440, bm = 46, pw = width - lm - rm;
+    const lm = 38, rm = lines ? 132 : 8, tm = lines ? 20 : 8, ph = 440, bm = 46, pw = width - lm - rm;
     const xw = ik.map((k, j) => RP.prop ? pw * rawTot[j] / G : pw / J);
     const x0 = []; { let x = lm; xw.forEach(w => { x0.push(x); x += w; }); }
     const xc = x0.map((x, j) => x + xw[j] / 2);
     let svg = '';
-    for (let g = 0; g <= 100; g += 20) { const y = tm + ph * (1 - g / 100); svg += `<text class="lbl" x="${lm - 6}" y="${y + 4}" text-anchor="end">${g}%</text>`; }
+    let ymax = 1;
+    if (lines) { // eje Y ajustado al valor máximo de las líneas
+      let mx = 0; order.forEach(p => ik.forEach((k, j) => { mx = Math.max(mx, shown(p, j)); }));
+      const st = mx > .5 ? 10 : 5; ymax = Math.min(1, Math.max(.1, Math.ceil(mx * 100 / st) * st / 100));
+      for (let g = 0; g <= ymax * 100 + 1e-9; g += st) { const y = tm + ph * (1 - g / 100 / ymax); svg += `<line class="ax" x1="${lm}" x2="${lm + pw}" y1="${y}" y2="${y}"/><text class="lbl" x="${lm - 6}" y="${y + 4}" text-anchor="end">${g}%</text>`; }
+    } else for (let g = 0; g <= 100; g += 20) { const y = tm + ph * (1 - g / 100); svg += `<text class="lbl" x="${lm - 6}" y="${y + 4}" text-anchor="end">${g}%</text>`; }
     const light = c => { const m = /^#([0-9a-f]{6})$/i.exec(c); if (!m) return false; const n = parseInt(m[1], 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255; return (0.299 * r + 0.587 * g + 0.114 * b) > 165; };
     const lbl = (x, y, v, fs, c) => light(c) ? `<text x="${x}" y="${y}" text-anchor="middle" font-size="${fs}" style="fill:#16202b;pointer-events:none">${fmt(100 * v, 0)}</text>`
       : `<text x="${x}" y="${y}" text-anchor="middle" font-size="${fs}" style="fill:#fff;paint-order:stroke;stroke:rgba(0,0,0,.35);stroke-width:2px;pointer-events:none">${fmt(100 * v, 0)}</text>`;
-    if (area) {
+    if (lines) {
+      // una línea por partido que pasa por el centro de cada posición
+      const Yv = v => tm + ph * (1 - v / ymax);
+      const ends = [], placed = [];
+      order.forEach(p => {
+        if (!rowT[p]) return;
+        const ys = ik.map((k, j) => shown(p, j));
+        let d = '';
+        if (RP.lsmooth !== false && J > 2) {
+          const f = monotone(xc, ys), STEPS = Math.max(80, Math.round((xc[J - 1] - xc[0]) / 3));
+          for (let s2 = 0; s2 <= STEPS; s2++) { const x = xc[0] + (xc[J - 1] - xc[0]) * s2 / STEPS; d += (s2 ? 'L' : 'M') + x.toFixed(2) + ',' + Yv(Math.max(0, f(x))).toFixed(2); }
+        } else d = ys.map((v, j) => (j ? 'L' : 'M') + xc[j].toFixed(2) + ',' + Yv(v).toFixed(2)).join('');
+        svg += `<g class="ln"><path d="${d}" fill="none" stroke="${cols[p]}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"${LC[p].np ? ' stroke-dasharray="6 4"' : ''}/>`;
+        ys.forEach((v, j) => { svg += `<circle cx="${xc[j].toFixed(2)}" cy="${Yv(v).toFixed(2)}" r="3.6" fill="${cols[p]}" stroke="var(--panel)" stroke-width="1.2"><title>${esc(LC[p].c[1])} · posición ${esc(iv.c[ik[j]][0])}: ${fmt(100 * share(p, j))}% de la posición · ${fmt(100 * pshare(p, j))}% del partido</title></circle>`; });
+        // valor en el pico de cada línea
+        let jm = 0; ys.forEach((v, j) => { if (v > ys[jm]) jm = j; });
+        const ly = Yv(ys[jm]) - 8, clash = placed.some(q => Math.abs(q.x - xc[jm]) < 22 && Math.abs(q.y - ly) < 12);
+        if (!clash) placed.push({ x: xc[jm], y: ly });
+        svg += clash ? '</g>' : `<text x="${xc[jm]}" y="${ly.toFixed(2)}" text-anchor="middle" font-size="10.5" font-weight="600" style="fill:${cols[p]};paint-order:stroke;stroke:var(--panel);stroke-width:3px">${fmt(100 * ys[jm], 0)}</text></g>`;
+        ends.push({ p, y: Yv(ys[J - 1]), y0: Yv(ys[J - 1]) });
+      });
+      // nombres al final de cada línea, sin solaparse
+      ends.sort((a, b) => a.y - b.y);
+      for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 13) ends[i].y = ends[i - 1].y + 13;
+      if (ends.length && ends[ends.length - 1].y > tm + ph + 4) { ends[ends.length - 1].y = tm + ph + 4; for (let i = ends.length - 2; i >= 0; i--) ends[i].y = Math.min(ends[i].y, ends[i + 1].y - 13); }
+      ends.forEach(e => { if (Math.abs(e.y - e.y0) > 3) svg += `<path d="M${xc[J - 1] + 5},${e.y0.toFixed(2)}L${xc[J - 1] + 15},${e.y.toFixed(2)}" stroke="${cols[e.p]}" fill="none" stroke-width="1"/>`;
+        svg += `<text x="${xc[J - 1] + 18}" y="${(e.y + 4).toFixed(2)}" font-size="11" font-weight="600" style="fill:${cols[e.p]}">${esc(shortName(LC[e.p]))}</text>`; });
+      ik.forEach((k, j) => { svg += `<line x1="${xc[j]}" x2="${xc[j]}" y1="${tm + ph}" y2="${tm + ph + 4}" stroke="var(--muted)"/>`; });
+    } else if (area) {
       // curvas suaves que pasan por el centro de cada posición; los extremos se prolongan en horizontal
       const xs = [lm, ...xc, lm + pw];
       const fns = order.map(p => { const ys = ik.map((k, j) => share(p, j)); return monotone(xs, [ys[0], ...ys, ys[J - 1]]); });
@@ -355,14 +431,14 @@
         const lo = cum.slice(); X.forEach((x, s) => cum[s] += V[s][o]);
         const Y = v => (tm + ph * (1 - v)).toFixed(2);
         const top = X.map((x, s) => `${x.toFixed(2)},${Y(cum[s])}`), bot = X.map((x, s) => `${x.toFixed(2)},${Y(lo[s])}`).reverse();
-        svg += `<path d="M${top.join('L')}L${bot.join('L')}Z" fill="${cols[p]}" stroke="${cols[p]}" stroke-width=".6"><title>${esc(pv.c[pk[p]][1])}</title></path>`;
+        svg += `<path d="M${top.join('L')}L${bot.join('L')}Z" fill="${cols[p]}" stroke="${cols[p]}" stroke-width=".6"><title>${esc(LC[p].c[1])}</title></path>`;
       });
       // etiquetas en el centro de cada posición
       ik.forEach((k, j) => {
         let acc = 0;
         order.forEach(p => {
           const v = share(p, j), y1 = tm + ph * (1 - acc - v); acc += v;
-          if (ph * v >= 15 && xw[j] >= 24) svg += lbl(xc[j], y1 + ph * v / 2 + 4, v, xw[j] > 50 ? 11 : 9.5, cols[p]);
+          if (ph * v >= 15 && xw[j] >= 24) svg += lbl(xc[j], y1 + ph * v / 2 + 4, shown(p, j), xw[j] > 50 ? 11 : 9.5, cols[p]);
         });
         svg += `<line x1="${xc[j]}" x2="${xc[j]}" y1="${tm + ph}" y2="${tm + ph + 4}" stroke="var(--muted)"/>`;
       });
@@ -372,8 +448,8 @@
         order.forEach(p => {
           const v = share(p, j), h = ph * v; if (h <= 0) return;
           y -= h;
-          svg += `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${(cw + .4).toFixed(2)}" height="${(h + .4).toFixed(2)}" fill="${cols[p]}"><title>${esc(iv.c[k][1])} · ${esc(pv.c[pk[p]][1])}: ${fmt(100 * v)}%</title></rect>`;
-          if (h >= 14 && cw >= 24) svg += lbl(x + cw / 2, y + h / 2 + 4, v, cw > 50 ? 11 : 9.5, cols[p]);
+          svg += `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${(cw + .4).toFixed(2)}" height="${(h + .4).toFixed(2)}" fill="${cols[p]}"><title>${esc(iv.c[k][1])} · ${esc(LC[p].c[1])}: ${fmt(100 * v)}% de la posición · ${fmt(100 * pshare(p, j))}% del partido</title></rect>`;
+          if (h >= 14 && cw >= 24) svg += lbl(x + cw / 2, y + h / 2 + 4, shown(p, j), cw > 50 ? 11 : 9.5, cols[p]);
         });
       });
     }
@@ -385,15 +461,15 @@
       }
     });
     svg += `<text class="lbl" x="${lm}" y="${tm + ph + 45}">← Extrema esquerra</text><text class="lbl" x="${lm + pw}" y="${tm + ph + 45}" text-anchor="end">Extrema dreta →</text>`;
-    const legend = order.map(p => `<span><i style="background:${cols[p]}"></i>${esc(pv.c[pk[p]][1])}</span>`).join('');
-    const thead = `<tr><th>Partido</th>${ik.map(k => `<th>${esc(iv.c[k][2] ? 'NS/NC' : iv.c[k][0])}</th>`).join('')}</tr>`;
-    const tbody = [...order].reverse().map(p => `<tr><td><span class="sw" style="background:${cols[p]}"></span>${esc(pv.c[pk[p]][1])}</td>${ik.map((k, j) => `<td>${fmt(100 * share(p, j))}</td>`).join('')}</tr>`).join('');
+    const legend = order.map(p => `<span><i style="background:${cols[p]}"></i>${esc(LC[p].c[1])}</span>`).join('');
+    const thead = `<tr><th>Partido</th>${ik.map(k => `<th>${esc(iv.c[k][2] ? 'NS/NC' : iv.c[k][0])}</th>`).join('')}${byP ? '<th class="tot">Total</th>' : ''}</tr>`;
+    const tbody = [...order].reverse().map(p => `<tr><td><span class="sw" style="background:${cols[p]}"></span>${esc(LC[p].c[1])}</td>${ik.map((k, j) => `<td>${fmt(100 * shown(p, j))}</td>`).join('')}${byP ? `<td class="tot">${rowT[p] ? '100,0' : '–'}</td>` : ''}</tr>`).join('');
     const tfoot = `<tr><td>n (sin ponderar)</td>${ik.map((k, j) => `<td>${un[j]}</td>`).join('')}</tr><tr><td>% de la muestra</td>${ik.map((k, j) => `<td>${fmt(100 * rawTot[j] / G)}</td>`).join('')}</tr>`;
-    const notes = [area ? 'Las curvas unen los valores de cada posición con una interpolación suave que no inventa picos: entre dos posiciones la franja nunca supera el mayor de sus dos valores.' : '',
+    const notes = [lines ? 'Las líneas unen los valores de cada posición con una interpolación suave que no inventa picos; la cifra marca el valor máximo de cada partido.' : area ? 'Las curvas unen los valores de cada posición con una interpolación suave que no inventa picos: entre dos posiciones la franja nunca supera el mayor de sus dos valores.' : '',
       RP.dsmooth ? 'Datos suavizados: cada posición se promedia con sus vecinas (pesos 1-2-1, según el tamaño de cada grupo). Reduce el ruido de los extremos, pero mezcla posiciones contiguas.' : ''].filter(Boolean).join(' ');
     box.innerHTML = `<div class="qtitle"><span class="eyebrow">${esc(iv.n)} × ${esc(pv.n)} · ${S.w === 'rec' ? 'Ponderado por recuerdo de voto' : S.w === 'ceo' ? 'Ponderación CEO' : 'Sin ponderar'}</span>
       <span class="q">Composición del voto en cada punto de la escala ideológica</span>
-      <span class="muted">Cada posición de la escala 0-10 suma 100%: muestra qué parte de quienes se ubican ahí votaría a cada partido al Parlament.</span></div>
+      <span class="muted">${lines ? (byP ? 'Cada línea es un partido y sus puntos suman 100%: muestra cómo se reparte su electorado a lo largo de la escala ideológica.' : 'Cada línea es un partido: indica qué porcentaje de quienes se ubican en cada posición votaría a ese partido al Parlament.') : byP ? 'La forma sigue mostrando la composición de cada posición, pero las cifras indican qué parte del electorado de cada partido se ubica en esa posición: los números de un mismo color suman 100%.' : 'Cada posición de la escala 0-10 suma 100%: muestra qué parte de quienes se ubican ahí votaría a cada partido al Parlament.'}${BAI.on && RP.nonvote ? ' ' + BAINOTE : ''}</span></div>
       <div class="chart">${svgWrap(width, tm + ph + bm + 4, svg)}</div><div class="legend">${legend}</div>
       ${notes ? `<p class="note">${notes}</p>` : ''}
       <details><summary>Ver tabla</summary><div class="tablewrap"><table>${'<thead>' + thead + '</thead><tbody>' + tbody + '</tbody><tfoot>' + tfoot + '</tfoot>'}</table></div></details>`;
@@ -414,26 +490,26 @@
   function affData() {
     const T = affTargets(); if (!Object.keys(T).length) return null;
     const gv = AF.grp === 'rec' ? byName.REC_AGRUPADO : keyOf('int_parlament'); const ga = codes(gv), W = weights();
-    const grp = new Array(N).fill(null); gv.c.forEach((c, k) => { const rc = rowcode(c[1]); if (rc) for (let i = 0; i < N; i++) if (ga[i] === k) grp[i] = rc; });
-    const tg = PORDER.filter(c => T[c]), rows = PORDER.filter(c => grp.includes(c));
+    const grp = keyArr(AF.grp === 'rec' ? 'rec' : 'int'), ord = partyOrderByIdeo();
+    const tg = ord.filter(c => T[c]), rows = ord.filter(c => grp.includes(c)), xrows = XKEYS().filter(k => grp.includes(k)), all = rows.concat(xrows);
     const M = {}, n = {};
-    rows.forEach(r => { M[r] = {}; n[r] = grp.filter(g => g === r).length; });
+    all.forEach(r => { M[r] = {}; n[r] = grp.filter(g => g === r).length; });
     tg.forEach(t => {
       const v = T[t], a = codes(v), s = {}, sw = {};
       for (let i = 0; i < N; i++) {
         const r = grp[i]; if (!r || a[i] === 255) continue; const c = v.c[a[i]]; if (c[2] || typeof c[0] !== 'number' || c[0] > 10) continue;
         const w = W ? W[i] : 1; s[r] = (s[r] || 0) + w * c[0]; sw[r] = (sw[r] || 0) + w;
       }
-      rows.forEach(r => { M[r][t] = sw[r] ? s[r] / sw[r] : null; });
+      all.forEach(r => { M[r][t] = sw[r] ? s[r] / sw[r] : null; });
     });
     // posición de cada electorado: ideología media e independentismo
     const iv = keyOf('ideologia'), dv = keyOf('independencia'), pos = {};
-    rows.forEach(r => pos[r] = { ix: 0, iw: 0, ds: 0, dw: 0 });
-    if (iv) { const a = codes(iv); for (let i = 0; i < N; i++) { const r = grp[i]; if (!r || a[i] === 255) continue; const c = iv.c[a[i]]; if (c[2] || c[0] > 10) continue; const w = W ? W[i] : 1; pos[r].ix += w * c[0]; pos[r].iw += w; } }
-    if (dv) { const a = codes(dv), si = dv.c.findIndex(c => /^S[ií]/.test(c[1])); for (let i = 0; i < N; i++) { const r = grp[i]; if (!r || a[i] === 255 || dv.c[a[i]][2]) continue; const w = W ? W[i] : 1; pos[r].dw += w; if (a[i] === si) pos[r].ds += w; } }
+    all.forEach(r => pos[r] = { ix: 0, iw: 0, ds: 0, dw: 0 });
+    if (iv) { const a = codes(iv); for (let i = 0; i < N; i++) { const r = grp[i]; if (!pos[r] || a[i] === 255) continue; const c = iv.c[a[i]]; if (c[2] || c[0] > 10) continue; const w = W ? W[i] : 1; pos[r].ix += w * c[0]; pos[r].iw += w; } }
+    if (dv) { const a = codes(dv), si = dv.c.findIndex(c => /^S[ií]/.test(c[1])); for (let i = 0; i < N; i++) { const r = grp[i]; if (!pos[r] || a[i] === 255 || dv.c[a[i]][2]) continue; const w = W ? W[i] : 1; pos[r].dw += w; if (a[i] === si) pos[r].ds += w; } }
     rows.forEach(r => { pos[r].ideo = pos[r].iw ? pos[r].ix / pos[r].iw : 5; pos[r].indep = pos[r].dw ? 100 * pos[r].ds / pos[r].dw : 50; });
     const mutual = (a, b) => (M[a] && M[b] && M[a][b] != null && M[b][a] != null) ? (M[a][b] + M[b][a]) / 2 : null;
-    return { T, tg, rows, M, n, pos, mutual, gv };
+    return { T, tg, rows, xrows, M, n, pos, mutual, gv };
   }
   const affColor = v => { const t = Math.max(-1, Math.min(1, (v - 5) / 5)); return { fill: t < 0 ? 'var(--aff-neg)' : 'var(--aff-pos)', op: .1 + .85 * Math.abs(t) }; };
   const noAff = () => {
@@ -450,26 +526,28 @@
     A.tg.forEach((t, j) => { svg += `<text x="${lw + j * cw + cw / 2}" y="${hh - 26}" text-anchor="middle" font-size="12" font-weight="600" style="fill:${PN[t][1]}">${esc(PN[t][0])}</text>`; });
     svg += `<text x="${lw + A.tg.length * cw / 2}" y="14" text-anchor="middle" class="lbl">Simpatía hacia los votantes de… (0 = mucha antipatía, 10 = mucha simpatía)</text>`;
     svg += `<text x="${lw + A.tg.length * cw + 34}" y="${hh - 26}" text-anchor="middle" class="lbl">n</text>`;
-    A.rows.forEach((r, i) => {
-      const y = hh - 16 + i * rh;
-      svg += `<text x="${lw - 10}" y="${y + rh / 2 + 4}" text-anchor="end" font-size="12.5" font-weight="600" style="fill:${PN[r][1]}">${esc(PN[r][0])}</text>`;
+    const SEP = 14, allR = A.rows.concat(A.xrows), yOf = i => hh - 16 + i * rh + (i >= A.rows.length ? SEP : 0);
+    if (A.xrows.length) { const ys = hh - 16 + A.rows.length * rh + SEP / 2; svg += `<line x1="8" x2="${lw + A.tg.length * cw}" y1="${ys}" y2="${ys}" stroke="var(--ink)" stroke-width="1.4" stroke-dasharray="5 3"/>`; }
+    allR.forEach((r, i) => {
+      const y = yOf(i);
+      svg += `<text x="${lw - 10}" y="${y + rh / 2 + 4}" text-anchor="end" font-size="12.5" font-weight="600" style="fill:${PN[r] ? PN[r][1] : 'var(--muted)'};${PN[r] ? '' : 'font-style:italic'}">${esc(keyName(r))}</text>`;
       A.tg.forEach((t, j) => {
         const v = A.M[r][t]; const x = lw + j * cw;
         if (v == null) return;
         const c = affColor(v), own = r === t;
-        svg += `<rect x="${x + 1.5}" y="${y + 1.5}" width="${cw - 3}" height="${rh - 3}" rx="4" fill="${c.fill}" fill-opacity="${c.op.toFixed(2)}"><title>Votantes de ${PN[r][0]} → votantes de ${PN[t][0]}: ${fmt(v, 2)}</title></rect>`;
+        svg += `<rect x="${x + 1.5}" y="${y + 1.5}" width="${cw - 3}" height="${rh - 3}" rx="4" fill="${c.fill}" fill-opacity="${c.op.toFixed(2)}"><title>${esc(keyName(r))} → votantes de ${PN[t][0]}: ${fmt(v, 2)}</title></rect>`;
         if (own) svg += `<rect x="${x + 1.5}" y="${y + 1.5}" width="${cw - 3}" height="${rh - 3}" rx="4" fill="none" stroke="var(--ink)" stroke-width="1.6"/>`;
         svg += `<text x="${x + cw / 2}" y="${y + rh / 2 + 4.5}" text-anchor="middle" font-size="12.5" style="fill:${c.op > .6 ? '#fff' : 'var(--ink)'};font-variant-numeric:tabular-nums">${fmt(v, 1)}</text>`;
       });
       svg += `<text x="${lw + A.tg.length * cw + 34}" y="${y + rh / 2 + 4}" text-anchor="middle" class="lbl" style="${A.n[r] < 60 ? 'font-style:italic' : ''}">${A.n[r]}</text>`;
     });
     // escala
-    const ly = hh - 16 + A.rows.length * rh + 18;
+    const ly = hh - 16 + allR.length * rh + (A.xrows.length ? SEP : 0) + 18;
     for (let k = 0; k <= 10; k++) { const c = affColor(k); svg += `<rect x="${lw + k * 26}" y="${ly}" width="26" height="10" fill="${c.fill}" fill-opacity="${c.op.toFixed(2)}"/><text class="lbl" x="${lw + k * 26 + 13}" y="${ly + 22}" text-anchor="middle" font-size="10">${k}</text>`; }
     svg += `<text class="lbl" x="${lw - 10}" y="${ly + 9}" text-anchor="end" font-size="10">Antipatía</text><text class="lbl" x="${lw + 11 * 26 + 6}" y="${ly + 9}" font-size="10">Simpatía</text>`;
     box.innerHTML = `<div class="qtitle"><span class="eyebrow">SIMPATIA_VOTANTS_*_0_10 × ${esc(A.gv.n)} · ${wLabel()}</span>
       <span class="q">¿Cuánta simpatía sienten los votantes de cada partido (filas) hacia los votantes de los demás (columnas)?</span>
-      <span class="muted">Media 0-10. Filas: votantes ${grpLabel()}. La casilla con borde es la simpatía hacia el propio electorado.</span></div>
+      <span class="muted">Media 0-10. Filas: votantes ${grpLabel()}. La casilla con borde es la simpatía hacia el propio electorado. Bajo la línea discontinua, ${BAI.on ? 'el BAI (blanco y nulo, abstención e indecisos): no votan a ningún partido, es una situación especial' : 'quienes votan en blanco o nulo, se abstienen o están indecisos: no votan a ningún partido'}.</span></div>
       <div class="chart">${svgWrap(Math.max(width, lw + A.tg.length * cw + 60), ly + 30, svg)}</div>
       <p class="note">La matriz no es simétrica: «PSC → ERC» puede diferir de «ERC → PSC». Filas con n en cursiva tienen menos de 60 entrevistas.</p>`;
   }
@@ -577,12 +655,14 @@
   const MESC = ['', 'ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   function initAffect() {
     const c = $('#rep-aff-ctl'); if (!c) return;
-    c.innerHTML = `<label>Agrupar votantes por <select id="afGrp"><option value="int">Intención de voto</option><option value="rec">Recuerdo de voto</option></select></label>
-      <label>Umbral de enlace en el mapa <input type="range" id="afThr" min="0" max="7" step="0.5" value="${AF.thr}" style="vertical-align:middle"> <b id="afThrV">${fmt(AF.thr, 1)}</b></label>
-      <label>Evolución <select id="afMode"><option value="mutua">Simpatía mutua</option><option value="dir">Por sentido (A→B y B→A)</option></select></label>`;
+    c.innerHTML = `<div class="seg" id="baiSeg" role="group" aria-label="Blanco, abstención e indecisos"><button data-b="1">BAI unido</button><button data-b="0">Blanco, abstención e indecisos por separado</button></div>
+      <label>Agrupar votantes por <select id="afGrp"><option value="int">Intención de voto</option><option value="rec">Recuerdo de voto</option></select></label>
+      <label>Umbral de enlace en el mapa <input type="range" id="afThr" min="0" max="7" step="0.5" value="${AF.thr}" style="vertical-align:middle"> <b id="afThrV">${fmt(AF.thr, 1)}</b></label>`;
     $('#afGrp').onchange = e => { AF.grp = e.target.value; renderAffect(); repLeadHeat(); };
+    const syncB = () => document.querySelectorAll('#baiSeg button').forEach(b => b.setAttribute('aria-pressed', (b.dataset.b === '1') === BAI.on)); syncB();
+    $('#baiSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; BAI.on = b.dataset.b === '1'; syncB(); renderReport(); };
     $('#afThr').oninput = e => { AF.thr = +e.target.value; $('#afThrV').textContent = fmt(AF.thr, 1); repAffNet(); };
-    $('#afMode').onchange = e => { AF.mode = e.target.value; repAffEvo(); };
+    const am = $('#afMode'); if (am) am.onchange = e => { AF.mode = e.target.value; repAffEvo(); };
   }
   function renderAffect() { repAffHeat(); repAffNet(); repAffEvo(); }
 
@@ -629,20 +709,21 @@
   function repLeadHeat() {
     const box = $('#rep-lead'); if (!box) return; const Ls = leaders();
     if (!Ls.length) { box.innerHTML = '<p class="note">Esta encuesta no incluye valoración de líderes.</p>'; return; }
-    const g = groupArr(AF.grp), W = weights(), rows = PORDER.filter(c => g.includes(c));
+    const g = keyArr(AF.grp === 'rec' ? 'rec' : 'int'), W = weights(), ord = partyOrderByIdeo(), prow = ord.filter(c => g.includes(c)), xr = XKEYS().filter(k => g.includes(k)), rows = prow.concat(xr);
     const M = {}, n = {};
     rows.forEach(r => { M[r] = Ls.map(() => [0, 0]); n[r] = 0; });
-    for (let i = 0; i < N; i++) { const r = g[i]; if (!r) continue; n[r]++; Ls.forEach((L, j) => { const x = ratingArr(L.v)[i]; if (!isNaN(x)) { const w = W ? W[i] : 1; M[r][j][0] += w * x; M[r][j][1] += w; } }); }
+    for (let i = 0; i < N; i++) { const r = g[i]; if (!r || !M[r]) continue; n[r]++; Ls.forEach((L, j) => { const x = ratingArr(L.v)[i]; if (!isNaN(x)) { const w = W ? W[i] : 1; M[r][j][0] += w * x; M[r][j][1] += w; } }); }
     const width = Math.max(340, box.clientWidth || 800), lw = 110, hh = 96, cw = Math.max(46, Math.min(70, (width - lw - 50) / Ls.length)), rh = 32;
     let svg = '';
     Ls.forEach((L, j) => { const x = lw + j * cw + cw / 2; svg += `<text transform="translate(${x + 4},${hh - 10}) rotate(-40)" font-size="11.5" font-weight="600" style="fill:${PN[L.party][1]}">${esc(L.short)}</text>`; });
     svg += `<text x="${lw + Ls.length * cw + 26}" y="${hh - 10}" text-anchor="middle" class="lbl">n</text>`;
+    const SEP = 14; if (xr.length) { const ys = hh + prow.length * rh + SEP / 2; svg += `<line x1="8" x2="${lw + Ls.length * cw}" y1="${ys}" y2="${ys}" stroke="var(--ink)" stroke-width="1.4" stroke-dasharray="5 3"/>`; }
     rows.forEach((r, i) => {
-      const y = hh + i * rh;
-      svg += `<text x="${lw - 10}" y="${y + rh / 2 + 4}" text-anchor="end" font-size="12.5" font-weight="600" style="fill:${PN[r][1]}">${esc(PN[r][0])}</text>`;
+      const y = hh + i * rh + (i >= prow.length ? SEP : 0);
+      svg += `<text x="${lw - 10}" y="${y + rh / 2 + 4}" text-anchor="end" font-size="12.5" font-weight="600" style="fill:${PN[r] ? PN[r][1] : 'var(--muted)'};${PN[r] ? '' : 'font-style:italic'}">${esc(keyName(r))}</text>`;
       Ls.forEach((L, j) => {
         const [s, sw] = M[r][j]; if (!sw) return; const v = s / sw, c = affColor(v), x = lw + j * cw;
-        svg += `<rect x="${x + 1.5}" y="${y + 1.5}" width="${cw - 3}" height="${rh - 3}" rx="4" fill="${c.fill}" fill-opacity="${c.op.toFixed(2)}"><title>Votantes de ${PN[r][0]} → ${esc(L.name)}: ${fmt(v, 2)}</title></rect>`;
+        svg += `<rect x="${x + 1.5}" y="${y + 1.5}" width="${cw - 3}" height="${rh - 3}" rx="4" fill="${c.fill}" fill-opacity="${c.op.toFixed(2)}"><title>${esc(keyName(r))} → ${esc(L.name)}: ${fmt(v, 2)}</title></rect>`;
         if (L.party === r) svg += `<rect x="${x + 1.5}" y="${y + 1.5}" width="${cw - 3}" height="${rh - 3}" rx="4" fill="none" stroke="var(--ink)" stroke-width="1.6"/>`;
         svg += `<text x="${x + cw / 2}" y="${y + rh / 2 + 4.5}" text-anchor="middle" font-size="12" style="fill:${c.op > .6 ? '#fff' : 'var(--ink)'}">${fmt(v, 1)}</text>`;
       });
@@ -650,8 +731,8 @@
     });
     box.innerHTML = `<div class="qtitle"><span class="eyebrow">Valoración de líderes 0-10 × electorados · ${wLabel()}</span>
       <span class="q">¿Cómo valora cada electorado (filas) a cada líder (columnas)?</span>
-      <span class="muted">Media 0-10 entre quienes conocen y valoran al líder. Votantes ${grpLabel()}. Con borde: el líder del propio partido.</span></div>
-      <div class="chart">${svgWrap(Math.max(width, lw + Ls.length * cw + 50), hh + rows.length * rh + 8, svg)}</div>`;
+      <span class="muted">Media 0-10 entre quienes conocen y valoran al líder. Votantes ${grpLabel()}. Con borde: el líder del propio partido. Bajo la línea discontinua, ${BAI.on ? 'el BAI (blanco y nulo, abstención e indecisos)' : 'blanco y nulo, abstención e indecisos'}.</span></div>
+      <div class="chart">${svgWrap(Math.max(width, lw + Ls.length * cw + 50), hh + rows.length * rh + (xr.length ? 14 : 0) + 8, svg)}</div>`;
   }
 
   /* 6 · ambivalencia entre dos líderes */
@@ -679,8 +760,9 @@
         groups.push({ key: p, lab: 'Se van', sub: PN[p][0], party: p, f: i => gr[i] === p && gi[i] !== p, tip: `votaron ${PN[p][0]} y ahora no tienen intención de repetir` });
         groups.push({ key: p, lab: 'Llegan', sub: PN[p][0], party: p, f: i => gi[i] === p && gr[i] !== p, tip: `ahora votarían ${PN[p][0]} sin haberlo votado` });
       });
-    } else { const g = groupArr(LS.gmode); PORDER.forEach(p => groups.push({ key: p, lab: PN[p][0], sub: '', party: p, f: i => g[i] === p })); }
+    } else { const g = keyArr(LS.gmode); partyOrderByIdeo().forEach(p => groups.push({ key: p, lab: PN[p][0], sub: '', party: p, f: i => g[i] === p })); XKEYS().forEach(k => groups.push({ key: k, lab: TRX[k][0], sub: '', party: k, x: true, f: i => g[i] === k })); }
     if (LS.onlyAB) groups = groups.filter(G => G.party === A.party || G.party === B.party);
+    if (LS.gmode === 'fid') groups.sort((a, b) => partyOrderByIdeo().indexOf(a.key) - partyOrderByIdeo().indexOf(b.key));
     groups.forEach(G => {
       G.s = [0, 0, 0, 0]; G.n = 0; G.nm = 0;
       for (let i = 0; i < N; i++) { if (!G.f(i)) continue; G.n++; if (isNaN(ra[i]) || isNaN(rb[i])) { G.nm++; continue; } const w = W ? W[i] : 1;
@@ -697,6 +779,7 @@
     const blocks = [];
     groups.forEach(G => {
       if (LS.gmode === 'fid' && prevKey !== null && prevKey !== G.key) { x += 14; }
+      if (G.x && !groups[groups.indexOf(G) - 1]?.x) { x += 10; svg += `<line x1="${x - 9}" x2="${x - 9}" y1="${tm}" y2="${tm + ph + 30}" stroke="var(--ink)" stroke-width="1.4" stroke-dasharray="5 3"/>`; }
       if (LS.gmode === 'fid' && prevKey !== G.key) blocks.push({ key: G.key, x0: x });
       prevKey = G.key;
       let y = tm + ph;
@@ -710,7 +793,7 @@
       });
       if (G.hl && anyHl) svg += `<rect x="${x - 1.5}" y="${tm - 1.5}" width="${cw + 3}" height="${ph + 3}" fill="none" stroke="var(--ink)" stroke-width="1.8" rx="2"/>`;
       svg += `</g>`;
-      svg += `<text x="${x + cw / 2}" y="${tm + ph + 15}" text-anchor="middle" font-size="11.5" font-weight="${G.hl && anyHl ? 800 : 600}" style="fill:${LS.gmode === 'fid' ? 'var(--ink)' : PN[G.party][1]};opacity:${anyHl && !G.hl ? .5 : 1}">${esc(G.lab)}</text>`;
+      svg += `<text x="${x + cw / 2}" y="${tm + ph + 15}" text-anchor="middle" font-size="11.5" font-weight="${G.hl && anyHl ? 800 : 600}" style="fill:${LS.gmode === 'fid' ? 'var(--ink)' : keyColor(G.party)};opacity:${anyHl && !G.hl ? .5 : 1}">${esc(G.lab)}</text>`;
       svg += `<text class="lbl" x="${x + cw / 2}" y="${tm + ph + 28}" text-anchor="middle" font-size="9.5">n=${G.n - G.nm}</text>`;
       if (LS.gmode === 'fid') blocks[blocks.length - 1].x1 = x + cw;
       x += cw + gap;
@@ -995,7 +1078,7 @@
       let tie = null; if (cand) { const rr = ratingArr(cand[0].v); let a = 0, t = 0; for (let i = 0; i < N; i++) { if (!sel(i) || isNaN(M.r[i])) continue; let mx = NaN; cand.forEach(o => { const v = ratingArr(o.v)[i]; if (!isNaN(v) && (isNaN(mx) || v > mx)) mx = v; }); if (isNaN(mx)) continue; const w = W ? W[i] : 1; t += w; if (M.r[i] >= mx) a += w; } tie = t ? 100 * a / t : null; }
       return { p, share: 100 * w / wPos, rL: rL.m, own, ownName, tie };
     });
-    const origTable = `<table><thead><tr><th>Votan hoy a…</th><th>% de los posibles</th><th>Valoran a ${esc(L.short)}</th><th>Valoran a su líder</th><th>% que ya valora igual o mejor a ${esc(L.short)}</th></tr></thead><tbody>${origRows.map(o => `<tr><td>${o.p === '_' ? 'Otros, en blanco, indecisos sin simpatía' : `<span class="sw" style="background:${PN[o.p][1]}"></span>${PN[o.p][0]}`}</td><td><b>${fmt(o.share, 1)}</b></td><td>${fmt(o.rL, 1)}</td><td>${o.own == null ? '–' : fmt(o.own, 1) + ' <span class="muted">(' + esc(o.ownName) + ')</span>'}</td><td>${o.tie == null ? '–' : fmt(o.tie, 0)}</td></tr>`).join('')}</tbody></table>`;
+    const origTable = `<table><thead><tr><th>Votan hoy a…</th><th>% de los posibles</th><th>Valoran a ${esc(L.short)}</th><th>Valoran a su líder</th><th>% que ya valora igual o mejor a ${esc(L.short)}</th></tr></thead><tbody>${origRows.map(o => `<tr><td>${o.p === '_' ? (BAI.on ? 'BAI y otros (blanco, abstención, indecisos sin simpatía, otros partidos)' : 'Otros partidos, en blanco, indecisos sin simpatía') : `<span class="sw" style="background:${PN[o.p][1]}"></span>${PN[o.p][0]}`}</td><td><b>${fmt(o.share, 1)}</b></td><td>${fmt(o.rL, 1)}</td><td>${o.own == null ? '–' : fmt(o.own, 1) + ' <span class="muted">(' + esc(o.ownName) + ')</span>'}</td><td>${o.tie == null ? '–' : fmt(o.tie, 0)}</td></tr>`).join('')}</tbody></table>`;
     // perfil comparado
     const PR = profileRows(M), groupsP = [['Duros', isDur], ['Blandos', isBla], ['Posibles', isPos], ['Difíciles + imposibles', i => M.cat[i] >= 3]];
     const prof = PR.map(r => { const vals = groupsP.map(([, g]) => wmean(r.f, g).m); return { r, vals }; });
@@ -1056,15 +1139,338 @@
   function renderSolid() { const M = repSolMap(); repSolRings(M); repPos(); }
   function renderLeaders() { repLeadHeat(); repAmbi(); renderSolid(); }
 
-  function renderReport() { repIdeoVote(); renderAffect(); renderLeaders(); }
+  /* ---------- Transferencias de voto: recuerdo → intención ---------- */
+  const TR = { base: 'row', extra: false };
+  function partyOrderByIdeo() { // partidos de izquierda a derecha según la ideología media de sus votantes en esta encuesta
+    const iv = keyOf('ideologia'), g = groupArr('int'), W = weights(); if (!iv) return PORDER.slice();
+    const a = codes(iv), s = {}, sw = {};
+    for (let i = 0; i < N; i++) { const p = g[i]; if (!p || a[i] === 255) continue; const c = iv.c[a[i]]; if (c[2] || c[0] > 10) continue; const w = W ? W[i] : 1; s[p] = (s[p] || 0) + w * c[0]; sw[p] = (sw[p] || 0) + w; }
+    return PORDER.slice().sort((x, y) => (sw[x] ? s[x] / sw[x] : PORDER.indexOf(x)) - (sw[y] ? s[y] / sw[y] : PORDER.indexOf(y)));
+  }
+  function trData() {
+    const order = partyOrderByIdeo(), W = weights(), rk = keyArr('rec'), ik = keyArr('int');
+    const keys = [...order, 'OTROS', ...XKEYS(), 'NOP'];
+    const rows = keys.filter(k => rk.includes(k)), cols = keys.filter(k => ik.includes(k));
+    const M = {}, rt = {}, ct = {}, rn = {}; rows.forEach(r => { M[r] = {}; rt[r] = 0; rn[r] = 0; }); cols.forEach(c => ct[c] = 0); let G = 0;
+    for (let i = 0; i < N; i++) { const r = rk[i], c = ik[i], w = W ? W[i] : 1; if (!(r in M) || !(c in ct)) continue; M[r][c] = (M[r][c] || 0) + w; rt[r] += w; ct[c] += w; rn[r]++; G += w; }
+    return { rows, cols, M, rt, ct, rn, G, name: keyName, color: keyColor };
+  }
+  function repTrHeat() {
+    const box = $('#rep-trm'); if (!box) return; const D2 = trData(), ctl = $('#rep-trm-ctl');
+    ctl.innerHTML = `<div class="seg" id="trBase"><button data-b="row">% por fila: a dónde van</button><button data-b="col">% por columna: de dónde vienen</button></div>
+      <div class="seg" id="trCol"><button data-c="party">Color del partido</button><button data-c="int">Color por intensidad</button></div>`;
+    document.querySelectorAll('#trBase button').forEach(b => b.setAttribute('aria-pressed', b.dataset.b === TR.base));
+    document.querySelectorAll('#trCol button').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === (TR.col || 'party')));
+    $('#trBase').onclick = e => { const b = e.target.closest('button'); if (!b) return; TR.base = b.dataset.b; repTrHeat(); };
+    $('#trCol').onclick = e => { const b = e.target.closest('button'); if (!b) return; TR.col = b.dataset.c; repTrHeat(); };
+    const byParty = (TR.col || 'party') === 'party';
+    const pct = (r, c) => { const v = D2.M[r][c] || 0, t = TR.base === 'row' ? D2.rt[r] : D2.ct[c]; return t ? 100 * v / t : null; };
+    const lum = h => { const n = parseInt(h.slice(1), 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255); };
+    const width = Math.max(340, box.clientWidth || 900), lw = 128, hh = 46, cw = Math.max(58, Math.min(82, (width - lw - 50) / D2.cols.length)), rh = 32;
+    let svg = `<text x="${lw + D2.cols.length * cw / 2}" y="10" text-anchor="middle" class="lbl">Intención de voto al Parlament ahora →</text>`;
+    // cabecera: celdas con el color de cada partido
+    D2.cols.forEach((c, j) => {
+      const x = lw + j * cw, col = D2.color(c), tc = lum(col) < 155 ? '#fff' : '#16202b', nm = D2.name(c), two = nm.length > 10 && nm.includes(' ');
+      svg += `<rect x="${x + 1}" y="16" width="${cw - 2}" height="${hh - 18}" rx="3" fill="${col}"/>`;
+      if (two) { const k = nm.indexOf(' ', Math.floor(nm.length / 2) - 3); const l1 = k > 0 ? nm.slice(0, k) : nm, l2 = k > 0 ? nm.slice(k + 1) : '';
+        svg += `<text x="${x + cw / 2}" y="${29}" text-anchor="middle" font-size="10.5" font-weight="700" style="fill:${tc}">${esc(l1)}</text><text x="${x + cw / 2}" y="${40}" text-anchor="middle" font-size="10.5" font-weight="700" style="fill:${tc}">${esc(l2)}</text>`; }
+      else svg += `<text x="${x + cw / 2}" y="${35}" text-anchor="middle" font-size="12" font-weight="700" style="fill:${tc}">${esc(nm)}</text>`;
+    });
+    svg += `<text x="${lw + D2.cols.length * cw + 24}" y="${hh - 6}" text-anchor="middle" class="lbl">n</text>`;
+    D2.rows.forEach((r, i) => {
+      const y = hh + 4 + i * rh, rc = D2.color(r), rtc = lum(rc) < 155 ? '#fff' : '#16202b';
+      svg += `<rect x="0" y="${y + 1}" width="${lw - 6}" height="${rh - 2}" rx="3" fill="${rc}"/><text x="${(lw - 6) / 2}" y="${y + rh / 2 + 4.5}" text-anchor="middle" font-size="12" font-weight="700" style="fill:${rtc}">${esc(D2.name(r))}</text>`;
+      D2.cols.forEach((c, j) => {
+        const p = pct(r, c); if (p == null) return; const x = lw + j * cw, diag = r === c;
+        let fillA, op;
+        if (byParty) { fillA = D2.color(c); op = diag ? .42 : .16; }
+        else { fillA = 'var(--accent)'; op = .04 + .9 * Math.min(1, p / 80); }
+        svg += `<rect x="${x + 1}" y="${y + 1}" width="${cw - 2}" height="${rh - 2}" fill="${fillA}" fill-opacity="${op.toFixed(3)}"><title>Recuerdo ${esc(D2.name(r))} → intención ${esc(D2.name(c))}: ${fmt(p, 2)}%</title></rect>`;
+        if (diag) svg += `<rect x="${x + 1}" y="${y + 1}" width="${cw - 2}" height="${rh - 2}" fill="none" stroke="var(--ink)" stroke-width="1.4"/>`;
+        const txtCol = !byParty && op > .55 ? 'var(--panel)' : 'var(--ink)';
+        svg += `<text x="${x + cw / 2}" y="${y + rh / 2 + 4.5}" text-anchor="middle" font-size="${diag ? 13 : 12}" font-weight="${diag ? 800 : 400}" style="fill:${txtCol};font-variant-numeric:tabular-nums">${p < .05 ? '·' : fmt(p, p < 10 ? 2 : 1) + '%'}</text>`;
+      });
+      svg += `<text x="${lw + D2.cols.length * cw + 24}" y="${y + rh / 2 + 4}" text-anchor="middle" class="lbl" style="${D2.rn[r] < 50 ? 'font-style:italic' : ''}">${D2.rn[r]}</text>`;
+    });
+    box.innerHTML = `<div class="qtitle"><span class="eyebrow">${esc(byName.REC_AGRUPADO.l.replace(/ \(agrupado.*$/, ''))} × intención de voto · ${wLabel()}</span>
+      <span class="q">Fidelidad y transferencia de voto: del voto en ${esc(I.eleccion)} a la intención de voto actual (${esc(MESC[I.mes])} ${I.anyo})</span>
+      <span class="muted">Filas: recuerdo de voto. Columnas: intención de voto actual. ${TR.base === 'row' ? 'Cada fila suma 100: qué harían ahora quienes votaron a cada partido.' : 'Cada columna suma 100: de dónde procede el voto actual de cada partido.'} En negrita y con borde, la fidelidad. Partidos de izquierda a derecha según la ideología media de sus votantes.</span></div>
+      <div class="chart">${svgWrap(Math.max(width, lw + D2.cols.length * cw + 50), hh + 8 + D2.rows.length * rh, svg)}</div>
+      <p class="note">Filas con n en cursiva tienen menos de 50 entrevistas. ${BAI.on ? BAINOTE : ''}</p>`;
+  }
+  function repTrBars() {
+    const box = $('#rep-trb'); if (!box) return; const D2 = trData(), ctl = $('#rep-trb-ctl');
+    ctl.innerHTML = `<label><input type="checkbox" id="trX" ${TR.extra ? 'checked' : ''}> Mostrar también ${BAI.on ? '' : 'blanco y nulo, indecisos y '}otros partidos</label>`;
+    $('#trX').onchange = e => { TR.extra = e.target.checked; repTrBars(); };
+    const rows = D2.rows.filter(r => PN[r] || r === 'BAI' || r === 'ABST' || r === 'NOP' || (TR.extra && D2.rn[r] >= 20));
+    const width = Math.max(340, Math.min(1000, box.clientWidth || 800)), lw = 110, rm = 24, bh = 30, gap = 10, tm = 28, pw = width - lw - rm;
+    let svg = '';
+    const nP = rows.filter(r => PN[r]).length, SEP = nP < rows.length ? 14 : 0, yOf = i => tm + i * (bh + gap) + (i >= nP ? SEP : 0), H = tm + rows.length * (bh + gap) + SEP;
+    for (let g = 0; g <= 100; g += 25) { const x = lw + pw * g / 100; svg += `<line class="ax" x1="${x}" x2="${x}" y1="${tm - 6}" y2="${H}"/><text class="lbl" x="${x}" y="${tm - 10}" text-anchor="middle">${g}%</text>`; }
+    if (SEP) { const ys = tm + nP * (bh + gap) + SEP / 2 - gap / 2; svg += `<line x1="8" x2="${lw + pw}" y1="${ys}" y2="${ys}" stroke="var(--ink)" stroke-width="1.4" stroke-dasharray="5 3"/>`; }
+    rows.forEach((r, i) => {
+      const y = yOf(i); let x = lw;
+      svg += `<text x="${lw - 10}" y="${y + bh / 2 + 4}" text-anchor="end" font-size="13" font-weight="600" style="${PN[r] ? '' : 'font-style:italic'}">${esc(D2.name(r))}</text>`;
+      D2.cols.forEach(c => {
+        const v = D2.rt[r] ? (D2.M[r][c] || 0) / D2.rt[r] : 0, w = pw * v; if (w <= 0) return;
+        const col = D2.color(c), n16 = parseInt(col.slice(1), 16), dark = (0.299 * (n16 >> 16) + 0.587 * ((n16 >> 8) & 255) + 0.114 * (n16 & 255)) < 155;
+        svg += `<rect x="${x.toFixed(2)}" y="${y}" width="${(w + .3).toFixed(2)}" height="${bh}" fill="${col}"><title>${esc(D2.name(r))} → ${esc(D2.name(c))}: ${fmt(100 * v, 1)}%</title></rect>`;
+        if (w >= 20) svg += `<text x="${x + 5}" y="${y + bh / 2 + 4.5}" font-size="12" font-weight="${r === c ? 700 : 500}" style="fill:${dark ? '#fff' : '#16202b'}">${fmt(100 * v, 0)}</text>`;
+        x += w;
+      });
+      if (i !== nP - 1) svg += `<line x1="${lw}" x2="${lw + pw}" y1="${y + bh + gap / 2}" y2="${y + bh + gap / 2}" class="ax"/>`;
+    });
+    const legend = D2.cols.map(c => `<span><i style="background:${D2.color(c)}"></i>${esc(D2.name(c))}</span>`).join('');
+    const fid = rows.filter(r => PN[r] && D2.rt[r]).map(r => `${PN[r][0]} ${fmt(100 * (D2.M[r][r] || 0) / D2.rt[r], 0)}%`).join(' · ');
+    box.innerHTML = `<div class="qtitle"><span class="eyebrow">Transferencia de votos · ${wLabel()}</span>
+      <span class="q">Votantes que en ${esc(I.eleccion.replace('Parlament ', ''))} votaron una opción y qué votarían ahora, en %</span>
+      <span class="muted">Fidelidad: ${fid}.</span></div>
+      <div class="legend">${legend}</div>
+      <div class="chart">${svgWrap(width, H + 4, svg)}</div>
+      <p class="note">Recuerdo de voto en las últimas elecciones al Parlament e intención directa de voto al Parlament. ${BAI.on ? BAINOTE + ' ' : ''}Otros partidos agrupa el resto de candidaturas. Partidos ordenados de izquierda a derecha según la ideología media de sus votantes.</p>`;
+  }
+
+  /* 1.3 · Sankey de transferencias */
+  const SK = { hideFid: false, min: 0, noX: true };
+  function repTrSankey() {
+    const box = $('#rep-trs'); if (!box) return; const D2 = trData(), ctl = $('#rep-trs-ctl');
+    ctl.innerHTML = `<label><input type="checkbox" id="skFid" ${SK.hideFid ? 'checked' : ''}> Ocultar a los fieles (ver solo los cambios de voto)</label>
+      <label><input type="checkbox" id="skX" ${SK.noX ? 'checked' : ''}> Ocultar ${BAI.on ? 'el BAI' : 'blanco y nulo, abstención e indecisos'} (se mantienen otros partidos y nuevos votantes)</label>
+      <label>Ocultar flujos menores de <select id="skMin">${[0, .3, .5, 1, 2].map(v => `<option value="${v}" ${v === SK.min ? 'selected' : ''}>${fmt(v, 1)}%</option>`).join('')}</select> del total</label>`;
+    $('#skFid').onchange = e => { SK.hideFid = e.target.checked; repTrSankey(); };
+    $('#skMin').onchange = e => { SK.min = +e.target.value; repTrSankey(); };
+    $('#skX').onchange = e => { SK.noX = e.target.checked; repTrSankey(); };
+    const flows = [];
+    D2.rows.forEach(r => D2.cols.forEach(c => { const v = D2.M[r][c] || 0; if (!v) return; if (SK.hideFid && r === c) return; if (SK.noX && ((XKEYS().includes(r)) || XKEYS().includes(c))) return; if (100 * v / D2.G < SK.min) return; flows.push({ r, c, v }); }));
+    const T = flows.reduce((a, f) => a + f.v, 0); if (!T) { box.innerHTML = '<p class="note">No hay flujos que mostrar con estos filtros.</p>'; return; }
+    const L = D2.rows.filter(r => flows.some(f => f.r === r)), R = D2.cols.filter(c => flows.some(f => f.c === c));
+    const tl = {}, tr = {}; flows.forEach(f => { tl[f.r] = (tl[f.r] || 0) + f.v; tr[f.c] = (tr[f.c] || 0) + f.v; });
+    const width = Math.max(360, Math.min(1100, box.clientWidth || 900)), lw = 150, rw = 150, nw = 14, H = 560, gapN = 8, tm = 24;
+    const xL = lw, xR = width - rw - nw;
+    const scale = Math.min((H - gapN * (L.length - 1)) / T, (H - gapN * (R.length - 1)) / T);
+    const posL = {}, posR = {}; let y = tm; L.forEach(r => { posL[r] = { y, h: tl[r] * scale, off: 0 }; y += tl[r] * scale + gapN; }); const hL = y - gapN;
+    y = tm; R.forEach(c => { posR[c] = { y, h: tr[c] * scale, off: 0 }; y += tr[c] * scale + gapN; }); const hR = y - gapN;
+    // dentro de cada nodo, los flujos se apilan siguiendo el orden del otro lado para minimizar cruces
+    const ordR = c => R.indexOf(c), ordL = r => L.indexOf(r);
+    const fl = flows.slice().sort((a, b) => ordL(a.r) - ordL(b.r) || ordR(a.c) - ordR(b.c));
+    fl.forEach(f => { f.y0 = posL[f.r].y + posL[f.r].off; posL[f.r].off += f.v * scale; });
+    flows.slice().sort((a, b) => ordR(a.c) - ordR(b.c) || ordL(a.r) - ordL(b.r)).forEach(f => { f.y1 = posR[f.c].y + posR[f.c].off; posR[f.c].off += f.v * scale; });
+    let svg = `<text x="${xL + nw / 2}" y="12" text-anchor="middle" class="lbl">${esc(I.eleccion)} (recuerdo)</text><text x="${xR + nw / 2}" y="12" text-anchor="middle" class="lbl">Intención actual (${esc(MESC[I.mes])} ${I.anyo})</text>`;
+    const mx = (xL + nw + xR) / 2;
+    fl.forEach(f => {
+      const h = f.v * scale, a0 = f.y0, a1 = f.y1, x0 = xL + nw, x1 = xR, col = D2.color(f.r);
+      const d = `M${x0},${a0} C${mx},${a0} ${mx},${a1} ${x1},${a1} L${x1},${a1 + h} C${mx},${a1 + h} ${mx},${a0 + h} ${x0},${a0 + h} Z`;
+      svg += `<path class="sk-link" d="${d}" fill="${col}" fill-opacity="${f.r === f.c ? .5 : .38}"><title>${esc(D2.name(f.r))} → ${esc(D2.name(f.c))}: ${fmt(100 * f.v / D2.rt[f.r], 1)}% de los votantes de ${esc(D2.name(f.r))} · ${fmt(100 * f.v / D2.G, 1)}% del total</title></path>`;
+    });
+    const place = (keys, pos) => { let last = -1e9; const out = {}; keys.forEach(k => { const want = pos[k].y + pos[k].h / 2; const yy = Math.max(want, last + 14); out[k] = yy; last = yy; }); return out; };
+    const yLabL = place(L, posL), yLabR = place(R, posR);
+    const lab = (k, p, side, tot, base) => {
+      const yy = (side === 'L' ? yLabL : yLabR)[k], x = side === 'L' ? xL - 8 : xR + nw + 8, anchor = side === 'L' ? 'end' : 'start';
+      return `<rect x="${side === 'L' ? xL : xR}" y="${p.y}" width="${nw}" height="${Math.max(1, p.h)}" fill="${D2.color(k)}"><title>${esc(D2.name(k))}: ${fmt(100 * tot / D2.G, 1)}% del total</title></rect>
+        ${true ? `<text x="${x}" y="${yy + 4}" text-anchor="${anchor}" font-size="12.5" font-weight="600" style="${PN[k] ? 'fill:' + PN[k][1] : 'fill:var(--muted);font-style:italic'}">${esc(D2.name(k))} <tspan class="lbl" font-weight="400" style="fill:var(--muted)">${fmt(100 * base / D2.G, 1)}%</tspan></text>` : ''}`;
+    };
+    L.forEach(r => svg += lab(r, posL[r], 'L', tl[r], D2.rt[r]));
+    R.forEach(c => svg += lab(c, posR[c], 'R', tr[c], D2.ct[c]));
+    box.innerHTML = `<div class="qtitle"><span class="eyebrow">Sankey de transferencias · ${wLabel()}</span>
+      <span class="q">Flujos de voto: de ${esc(I.eleccion)} a la intención de voto actual</span>
+      <span class="muted">El grosor de cada flujo es proporcional al número de votantes (ponderado). Los porcentajes junto a cada partido son su peso sobre toda la muestra. Pasa el ratón por un flujo para ver el detalle.${BAI.on ? ' ' + BAINOTE : ''}</span></div>
+      <div class="chart">${svgWrap(width, Math.max(hL, hR, ...Object.values(yLabL), ...Object.values(yLabR)) + 14, svg)}</div>
+      <p class="note">Partidos ordenados de arriba abajo de izquierda a derecha ideológica.${SK.min ? ` No se dibujan los flujos inferiores al ${fmt(SK.min, 1)}% del total.` : ''}${SK.hideFid ? ' Los votantes fieles están ocultos: el gráfico muestra solo a quienes cambian.' : ''}</p>`;
+  }
+
+  /* 1.4 · Matriz de transferencias netas */
+  const NET = { unit: 'pct', onlyP: true };
+  const fint = n => Math.round(Math.abs(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const CENSO = { '2015': 5510853, '2017': 5554455, '2021': 5624067, '2024': 5754952 };
+  function repTrNet() {
+    const box = $('#rep-trn'); if (!box) return; const D2 = trData(), ctl = $('#rep-trn-ctl'), cen = CENSO[I.ref] || 5600000;
+    ctl.innerHTML = `<div class="seg" id="netU"><button data-u="pct">% del censo</button><button data-u="vot">Votos</button></div><label><input type="checkbox" id="netP" ${NET.onlyP ? 'checked' : ''}> Ocultar ${BAI.on ? 'el BAI' : 'blanco y nulo, abstención e indecisos'} del saldo (se mantienen otros partidos y nuevos votantes)</label><span class="note">Votos: aplicado al censo de ${esc(I.eleccion)} (${fint(cen)} electores).</span>`;
+    document.querySelectorAll('#netU button').forEach(b => b.setAttribute('aria-pressed', b.dataset.u === NET.unit));
+    $('#netP').onchange = e => { NET.onlyP = e.target.checked; repTrNet(); };
+    $('#netU').onclick = e => { const b = e.target.closest('button'); if (!b) return; NET.unit = b.dataset.u; repTrNet(); };
+    const keys = []; [...D2.rows, ...D2.cols].forEach(k => { if (!keys.includes(k) && !(NET.onlyP && XKEYS().includes(k))) keys.push(k); });
+    const ordK = [...partyOrderByIdeo(), 'OTROS', ...XKEYS(), 'NOP']; keys.sort((a, b) => ordK.indexOf(a) - ordK.indexOf(b));
+    const f = (a, b) => (D2.M[a] && D2.M[a][b]) || 0, G = D2.G;
+    const net = (a, b) => (f(b, a) - f(a, b)) / G; // lo que la fila gana (+) o pierde (−) frente a la columna, en proporción del censo
+    const val = x => NET.unit === 'pct' ? 100 * x : x * cen;
+    const show = x => { const v = val(x); if (NET.unit === 'pct') return Math.abs(v) < .005 ? '0' : (v > 0 ? '+' : '−') + fmt(Math.abs(v), 2); const r = Math.round(v / 100) * 100; return r === 0 ? '0' : (r > 0 ? '+' : '−') + fint(r); };
+    const showAbs = x => NET.unit === 'pct' ? fmt(100 * x, 2) : fint(Math.round(x * cen / 100) * 100);
+    const rowsK = keys.filter(k => k !== 'NOP');
+    const S2 = keys.map(a => { let lle = 0, fug = 0; keys.forEach(b => { if (b === a) return; lle += f(b, a); fug += f(a, b); }); const rec = D2.rt[a] || 0; return { k: a, lle: lle / G, fug: fug / G, sal: (lle - fug) / G, fid: rec ? 100 * f(a, a) / rec : null, fieles: f(a, a) / G, rec: rec / G, fin: rec / G + (lle - fug) / G }; });
+    const maxN = Math.max(...keys.flatMap(a => keys.filter(b => b !== a).map(b => Math.abs(net(a, b)))), 1e-9);
+    const lum = h => { const n = parseInt(h.slice(1), 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255); };
+    const width = Math.max(340, box.clientWidth || 1000), lw = 128, hh = 46, K = keys.length;
+    const cw = Math.max(52, Math.min(72, (width - lw - 5 * 84 - 20) / K)), rh = 32, sx = lw + K * cw + 14, sw = 84;
+    let svg = `<text x="${lw + K * cw / 2}" y="10" text-anchor="middle" class="lbl">… frente a (columna)</text>`;
+    keys.forEach((c, j) => {
+      const x = lw + j * cw, col = keyColor(c), tc = lum(col) < 155 ? '#fff' : '#16202b', nm = keyName(c), two = nm.length > 9 && nm.includes(' ');
+      svg += `<rect x="${x + 1}" y="16" width="${cw - 2}" height="${hh - 18}" rx="3" fill="${col}"/>`;
+      if (two) { const sp = nm.indexOf(' '); svg += `<text x="${x + cw / 2}" y="29" text-anchor="middle" font-size="10" font-weight="700" style="fill:${tc}">${esc(nm.slice(0, sp))}</text><text x="${x + cw / 2}" y="40" text-anchor="middle" font-size="10" font-weight="700" style="fill:${tc}">${esc(nm.slice(sp + 1))}</text>`; }
+      else svg += `<text x="${x + cw / 2}" y="35" text-anchor="middle" font-size="11.5" font-weight="700" style="fill:${tc}">${esc(nm)}</text>`;
+    });
+    ['Fieles', 'Llegadas', 'Fugas', 'Saldo neto', 'Total final'].forEach((t, j) => svg += `<text x="${sx + j * sw + sw / 2}" y="35" text-anchor="middle" font-size="11.5" font-weight="700" style="fill:var(--ink)">${t}</text>`);
+    rowsK.forEach((r, i) => {
+      const y = hh + 4 + i * rh, rc = keyColor(r), rtc = lum(rc) < 155 ? '#fff' : '#16202b';
+      svg += `<rect x="0" y="${y + 1}" width="${lw - 6}" height="${rh - 2}" rx="3" fill="${rc}"/><text x="${(lw - 6) / 2}" y="${y + rh / 2 + 4.5}" text-anchor="middle" font-size="12" font-weight="700" style="fill:${rtc}">${esc(keyName(r))}</text>`;
+      keys.forEach((c, j) => {
+        const x = lw + j * cw;
+        if (r === c) {
+          const s = S2[keys.indexOf(r)];
+          svg += `<rect x="${x + 1}" y="${y + 1}" width="${cw - 2}" height="${rh - 2}" fill="${keyColor(r)}" fill-opacity=".35" stroke="var(--ink)" stroke-width="1.4"><title>Fieles a ${esc(keyName(r))}: ${showAbs(s.fieles)}${NET.unit === 'pct' ? '% del censo' : ' votantes'} (${s.fid == null ? '–' : fmt(s.fid, 1) + '%'} de quienes lo votaron)</title></rect>`;
+          svg += `<text x="${x + cw / 2}" y="${y + 13}" text-anchor="middle" font-size="${NET.unit === 'pct' ? 11.5 : 10.5}" font-weight="800" style="fill:var(--ink);font-variant-numeric:tabular-nums">${showAbs(s.fieles)}</text><text x="${x + cw / 2}" y="${y + 25}" text-anchor="middle" font-size="9.5" class="lbl">${s.fid == null ? '' : fmt(s.fid, 0) + '% fiel'}</text>`;
+          return;
+        }
+        const n = net(r, c), a = Math.min(1, Math.abs(n) / maxN), pos = n > 0;
+        svg += `<rect x="${x + 1}" y="${y + 1}" width="${cw - 2}" height="${rh - 2}" fill="${pos ? 'var(--gain)' : 'var(--loss)'}" fill-opacity="${(Math.abs(n) * G < 1e-9 ? 0 : .08 + .8 * a).toFixed(3)}"><title>${esc(keyName(r))} frente a ${esc(keyName(c))}: recibe ${showAbs(f(c, r) / G)} y cede ${showAbs(f(r, c) / G)} → saldo ${show(n)}${NET.unit === 'pct' ? ' pp' : ' votos'}</title></rect>`;
+        svg += `<text x="${x + cw / 2}" y="${y + rh / 2 + 4.5}" text-anchor="middle" font-size="${NET.unit === 'pct' ? 11.5 : 10.5}" style="fill:${a > .6 ? '#fff' : 'var(--ink)'};font-variant-numeric:tabular-nums">${show(n)}</text>`;
+      });
+      const s = S2[keys.indexOf(r)], cells = [[`${showAbs(s.fieles)}${s.fid == null ? '' : ` (${fmt(s.fid, 0)}%)`}`, null], [showAbs(s.lle), null], [showAbs(s.fug), null], [show(s.sal), s.sal], [showAbs(s.fin), 'fin']];
+      cells.forEach(([t, v], j) => {
+        const x = sx + j * sw;
+        if (v === 'fin') { svg += `<rect x="${x + 1}" y="${y + 1}" width="${sw - 2}" height="${rh - 2}" rx="3" fill="${keyColor(s.k)}" fill-opacity=".22" stroke="${keyColor(s.k)}" stroke-width="1"><title>${esc(keyName(s.k))}: partía de ${showAbs(s.rec)} ${show(s.sal)} de saldo = ${showAbs(s.fin)}${NET.unit === 'pct' ? '% del censo' : ' votantes'}</title></rect>`; }
+        else if (v != null) svg += `<rect x="${x + 1}" y="${y + 1}" width="${sw - 2}" height="${rh - 2}" rx="3" fill="${v > 0 ? 'var(--gain)' : 'var(--loss)'}" fill-opacity=".22"/>`;
+        svg += `<text x="${x + sw / 2}" y="${y + rh / 2 + 4.5}" text-anchor="middle" font-size="12" font-weight="${v != null ? 800 : 500}" style="fill:var(--ink);font-variant-numeric:tabular-nums">${t}</text>`;
+      });
+    });
+    const Hm = hh + 8 + rowsK.length * rh;
+    // barras de saldo neto
+    const parts = S2.filter(s => s.k !== 'NOP'), mx = Math.max(...parts.map(s => Math.abs(s.sal)), 1e-9), bw2 = Math.min(820, width - 20), cx = 150 + (bw2 - 150) / 2, half = (bw2 - 150) / 2 - 80, bh = 20;
+    let bars = `<line x1="${cx}" x2="${cx}" y1="0" y2="${parts.length * (bh + 6)}" stroke="var(--muted)"/>`;
+    parts.slice().sort((a, b) => b.sal - a.sal).forEach((s, i) => {
+      const y = i * (bh + 6), w = half * Math.abs(s.sal) / mx, x = s.sal >= 0 ? cx : cx - w;
+      bars += `<text x="140" y="${y + bh / 2 + 4}" text-anchor="end" font-size="12.5" font-weight="600" style="fill:${PN[s.k] ? PN[s.k][1] : 'var(--muted)'}">${esc(keyName(s.k))}</text>`;
+      bars += `<rect x="${x}" y="${y}" width="${Math.max(1, w)}" height="${bh}" rx="2" fill="${keyColor(s.k)}"><title>Llegadas ${showAbs(s.lle)} − fugas ${showAbs(s.fug)} = ${show(s.sal)}</title></rect>`;
+      bars += `<text x="${s.sal >= 0 ? x + w + 5 : x - 5}" y="${y + bh / 2 + 4}" text-anchor="${s.sal >= 0 ? 'start' : 'end'}" font-size="12" font-weight="700" style="fill:var(--ink)">${show(s.sal)}</text>`;
+    });
+    const unitTxt = NET.unit === 'pct' ? 'puntos porcentuales del censo' : `votos sobre un censo de ${fint(cen)} electores`;
+    box.innerHTML = `<div class="qtitle"><span class="eyebrow">Transferencias netas · ${wLabel()}</span>
+      <span class="q">¿Quién gana y quién pierde en el intercambio de votantes?</span>
+      <span class="muted">Cada casilla es el saldo entre dos opciones: lo que la fila recibe de la columna menos lo que le cede. Verde = la fila gana votantes; rojo = los pierde. La diagonal y la columna «Fieles» muestran a quienes repiten voto, en la misma unidad que el resto (entre paréntesis, el % de sus votantes que repite). «Total final» es lo que tendría cada opción tras aplicar el saldo neto a su recuerdo de voto${NET.onlyP ? ' sin contar los intercambios con el BAI' : ', es decir, su intención de voto actual'}. Cifras en ${unitTxt}.${BAI.on ? ' ' + BAINOTE : ''}</span></div>
+      <div class="chart">${svgWrap(Math.max(width, sx + 5 * sw + 4), Hm, svg)}</div>
+      <h3>Saldo neto: llegadas menos fugas</h3>
+      <div class="chart">${svgWrap(bw2, parts.length * (bh + 6), bars)}</div>
+      <p class="note">${NET.onlyP ? `Saldo calculado sin ${BAI.on ? 'el BAI' : 'blanco, abstención e indecisos'}: no incluye lo que cada partido gana o pierde hacia la abstención, el blanco o la indecisión, pero sí lo que recibe de los nuevos votantes.` : `El saldo neto de cada opción es la diferencia entre su intención de voto actual y su recuerdo de voto. Ojo con el ${BAI.on ? 'BAI' : 'bloque de blanco, abstención e indecisos'}: la ponderación ajusta el recuerdo de abstención al dato real, mientras que en la intención de voto la gente siempre dice que irá a votar más de lo que luego va; por eso ese bloque «pierde» mucho y los partidos «ganan» de él. Para comparar a los partidos sin ese efecto, marca «Ocultar el BAI del saldo».`} «No podía votar» (nuevos electores) solo aparece como columna: siempre aporta votantes a los demás. Los flujos pequeños entre dos partidos se basan en pocas entrevistas: ${NET.unit === 'vot' ? 'las cifras en votos son una extrapolación orientativa, redondeada a centenas, y tienen el mismo margen de error que la encuesta' : 'conviene leerlos con cautela'}.</p>`;
+  }
+
+  /* 1.5 · Sankey de transferencias netas */
+  const SKN = { fid: false, noX: true, min: 0, unit: 'pct' };
+  function repTrSankeyNet() {
+    const box = $('#rep-trsn'); if (!box) return; const D2 = trData(), ctl = $('#rep-trsn-ctl'), cen = CENSO[I.ref] || 5600000;
+    ctl.innerHTML = `<div class="seg" id="sknU"><button data-u="pct">% del censo</button><button data-u="vot">Votos</button></div>
+      <label><input type="checkbox" id="sknF" ${SKN.fid ? 'checked' : ''}> Mostrar también a los fieles</label>
+      <label><input type="checkbox" id="sknX" ${SKN.noX ? 'checked' : ''}> Ocultar ${BAI.on ? 'el BAI' : 'blanco y nulo, abstención e indecisos'} (se mantienen otros partidos y nuevos votantes)</label>
+      <label>Ocultar saldos menores de <select id="sknMin">${[0, .1, .3, .5, 1].map(v => `<option value="${v}" ${v === SKN.min ? 'selected' : ''}>${fmt(v, 1)}%</option>`).join('')}</select> del censo</label>`;
+    document.querySelectorAll('#sknU button').forEach(b => b.setAttribute('aria-pressed', b.dataset.u === SKN.unit));
+    $('#sknU').onclick = e => { const b = e.target.closest('button'); if (!b) return; SKN.unit = b.dataset.u; repTrSankeyNet(); };
+    $('#sknF').onchange = e => { SKN.fid = e.target.checked; repTrSankeyNet(); };
+    $('#sknX').onchange = e => { SKN.noX = e.target.checked; repTrSankeyNet(); };
+    $('#sknMin').onchange = e => { SKN.min = +e.target.value; repTrSankeyNet(); };
+    const keys = []; [...D2.rows, ...D2.cols].forEach(k => { if (!keys.includes(k) && !(SKN.noX && XKEYS().includes(k))) keys.push(k); });
+    const ordK = [...partyOrderByIdeo(), 'OTROS', ...XKEYS(), 'NOP']; keys.sort((a, b) => ordK.indexOf(a) - ordK.indexOf(b));
+    const f = (a, b) => (D2.M[a] && D2.M[a][b]) || 0, G = D2.G;
+    const u = x => SKN.unit === 'pct' ? fmt(100 * x / G, 2) + '%' : fint(Math.round(x / G * cen / 100) * 100);
+    const flows = [];
+    keys.forEach((a, i) => keys.forEach((b, j) => {
+      if (a === b) { if (SKN.fid && f(a, a)) flows.push({ r: a, c: a, v: f(a, a), fid: true }); return; }
+      if (j <= i) return;
+      const n = f(a, b) - f(b, a); if (!n || 100 * Math.abs(n) / G < SKN.min) return;
+      flows.push(n > 0 ? { r: a, c: b, v: n, ab: f(a, b), ba: f(b, a) } : { r: b, c: a, v: -n, ab: f(b, a), ba: f(a, b) });
+    }));
+    const T = flows.reduce((a, x) => a + x.v, 0); if (!T) { box.innerHTML = '<p class="note">No hay saldos que mostrar con estos filtros.</p>'; return; }
+    const L = keys.filter(k => flows.some(x => x.r === k)), R = keys.filter(k => flows.some(x => x.c === k));
+    const tl = {}, tr = {}; flows.forEach(x => { tl[x.r] = (tl[x.r] || 0) + x.v; tr[x.c] = (tr[x.c] || 0) + x.v; });
+    const width = Math.max(360, Math.min(1100, box.clientWidth || 900)), lw = 170, rw = 170, nw = 14, H = 520, gapN = 8, tm = 24;
+    const xL = lw, xR = width - rw - nw;
+    const scale = Math.min((H - gapN * (L.length - 1)) / T, (H - gapN * (R.length - 1)) / T);
+    const posL = {}, posR = {}; let y = tm; L.forEach(r => { posL[r] = { y, h: tl[r] * scale, off: 0 }; y += tl[r] * scale + gapN; }); const hL = y - gapN;
+    y = tm; R.forEach(c => { posR[c] = { y, h: tr[c] * scale, off: 0 }; y += tr[c] * scale + gapN; }); const hR = y - gapN;
+    const ordR = c => R.indexOf(c), ordL = r => L.indexOf(r);
+    const fl = flows.slice().sort((a, b) => ordL(a.r) - ordL(b.r) || ordR(a.c) - ordR(b.c));
+    fl.forEach(x => { x.y0 = posL[x.r].y + posL[x.r].off; posL[x.r].off += x.v * scale; });
+    flows.slice().sort((a, b) => ordR(a.c) - ordR(b.c) || ordL(a.r) - ordL(b.r)).forEach(x => { x.y1 = posR[x.c].y + posR[x.c].off; posR[x.c].off += x.v * scale; });
+    let svg = `<text x="${xL + nw / 2}" y="12" text-anchor="middle" class="lbl">Ceden votantes (saldo negativo)</text><text x="${xR + nw / 2}" y="12" text-anchor="middle" class="lbl">Reciben votantes (saldo positivo)</text>`;
+    const mx = (xL + nw + xR) / 2;
+    fl.forEach(x => {
+      const h = x.v * scale, a0 = x.y0, a1 = x.y1, x0 = xL + nw, x1 = xR, col = x.fid ? keyColor(x.r) : keyColor(x.c);
+      const d = `M${x0},${a0} C${mx},${a0} ${mx},${a1} ${x1},${a1} L${x1},${a1 + h} C${mx},${a1 + h} ${mx},${a0 + h} ${x0},${a0 + h} Z`;
+      const tip = x.fid ? `Fieles a ${keyName(x.r)}: ${u(x.v)}` : `${keyName(x.c)} gana en neto ${u(x.v)} frente a ${keyName(x.r)} (recibe ${u(x.ab)} y le devuelve ${u(x.ba)})`;
+      svg += `<path class="sk-link" d="${d}" fill="${col}" fill-opacity="${x.fid ? .18 : .45}"><title>${esc(tip)}</title></path>`;
+    });
+    const place = (ks, pos) => { let last = -1e9; const out = {}; ks.forEach(k => { const yy = Math.max(pos[k].y + pos[k].h / 2, last + 14); out[k] = yy; last = yy; }); return out; };
+    const yLabL = place(L, posL), yLabR = place(R, posR);
+    const lab = (k, p, side, tot) => {
+      const yy = (side === 'L' ? yLabL : yLabR)[k], x = side === 'L' ? xL - 8 : xR + nw + 8, anchor = side === 'L' ? 'end' : 'start', net = tot - (SKN.fid ? f(k, k) : 0);
+      return `<rect x="${side === 'L' ? xL : xR}" y="${p.y}" width="${nw}" height="${Math.max(1, p.h)}" fill="${keyColor(k)}"/>
+        <text x="${x}" y="${yy + 4}" text-anchor="${anchor}" font-size="12.5" font-weight="600" style="${PN[k] ? 'fill:' + PN[k][1] : 'fill:var(--muted);font-style:italic'}">${esc(keyName(k))} <tspan font-weight="700" style="fill:${side === 'L' ? 'var(--loss)' : 'var(--gain)'}">${side === 'L' ? '−' : '+'}${u(net)}</tspan></text>`;
+    };
+    L.forEach(r => svg += lab(r, posL[r], 'L', tl[r]));
+    R.forEach(c => svg += lab(c, posR[c], 'R', tr[c]));
+    box.innerHTML = `<div class="qtitle"><span class="eyebrow">Sankey de transferencias netas · ${wLabel()}</span>
+      <span class="q">Saldos netos de voto entre opciones: quién cede votantes a quién</span>
+      <span class="muted">Para cada pareja solo se dibuja el saldo: si ERC da 4 votantes al PSC y el PSC da 3 a ERC, aparece un flujo de 1 de ERC al PSC. A la izquierda, la suma de lo que cada opción cede en neto; a la derecha, lo que recibe. Cada flujo lleva el color de quien gana. Cifras en ${SKN.unit === 'pct' ? '% del censo' : `votos sobre un censo de ${fint(cen)} electores`}.${BAI.on ? ' ' + BAINOTE : ''}</span></div>
+      <div class="chart">${svgWrap(width, Math.max(hL, hR, ...Object.values(yLabL), ...Object.values(yLabR)) + 14, svg)}</div>
+      <p class="note">Una misma opción puede aparecer a los dos lados: cede en neto frente a unas y gana frente a otras. Los nuevos votantes («No podía votar») solo pueden ceder. ${SKN.fid ? 'Los fieles se muestran como flujos claros de cada opción hacia sí misma. ' : ''}Pasa el ratón por un flujo para ver el intercambio en los dos sentidos.</p>`;
+  }
+
+  /* 1.5 · Transferencia de votos netas (barras divergentes) */
+  const NB = { noX: true, unit: 'pct' };
+  function repTrNetBars() {
+    const box = $('#rep-trnb'); if (!box) return; const D2 = trData(), ctl = $('#rep-trnb-ctl'), cen = CENSO[I.ref] || 5600000;
+    ctl.innerHTML = `<div class="seg" id="nbU"><button data-u="pct">% del censo</button><button data-u="vot">Votos</button></div>
+      <label><input type="checkbox" id="nbX" ${NB.noX ? 'checked' : ''}> Ocultar ${BAI.on ? 'el BAI' : 'blanco y nulo, abstención e indecisos'} (se mantienen otros partidos y nuevos votantes)</label>`;
+    document.querySelectorAll('#nbU button').forEach(b => b.setAttribute('aria-pressed', b.dataset.u === NB.unit));
+    $('#nbU').onclick = e => { const b = e.target.closest('button'); if (!b) return; NB.unit = b.dataset.u; repTrNetBars(); };
+    $('#nbX').onchange = e => { NB.noX = e.target.checked; repTrNetBars(); };
+    const keys = []; [...D2.rows, ...D2.cols].forEach(k => { if (!keys.includes(k) && !(NB.noX && XKEYS().includes(k))) keys.push(k); });
+    const ordK = [...partyOrderByIdeo(), 'OTROS', ...XKEYS(), 'NOP']; keys.sort((a, b) => ordK.indexOf(a) - ordK.indexOf(b));
+    const rows = keys.filter(k => k !== 'NOP');
+    const f = (a, b) => (D2.M[a] && D2.M[a][b]) || 0, G = D2.G;
+    const val = x => NB.unit === 'pct' ? 100 * x : x * cen;
+    const lab = x => { const v = val(x); if (NB.unit === 'pct') return (v > 0 ? '+' : v < 0 ? '−' : '') + fmt(Math.abs(v), Math.abs(v) < 1 ? 2 : 1); const r = Math.round(v / 100) * 100; return (r > 0 ? '+' : r < 0 ? '−' : '') + fint(r); };
+    const data = rows.map(a => { const segs = keys.filter(b => b !== a).map(b => ({ b, n: (f(b, a) - f(a, b)) / G })).filter(s => s.n); return { a, segs, neg: segs.filter(s => s.n < 0).reduce((t, s) => t + s.n, 0), pos: segs.filter(s => s.n > 0).reduce((t, s) => t + s.n, 0) }; });
+    const mx = Math.max(...data.map(d => Math.max(-d.neg, d.pos)), 1e-9);
+    const width = Math.max(360, Math.min(1100, box.clientWidth || 900)), lw = 120, rm = 90, bh = 28, gap = 12, tm = 46, pw = width - lw - rm, cx = lw + pw / 2, half = pw / 2;
+    const nP = rows.filter(r => PN[r]).length, SEP = nP < rows.length ? 14 : 0, yOf = i => tm + i * (bh + gap) + (i >= nP ? SEP : 0), H = tm + rows.length * (bh + gap) + SEP;
+    let svg = `<text x="${cx - half / 2}" y="14" text-anchor="middle" class="lbl">← Pierde votantes frente a…</text><text x="${cx + half / 2}" y="14" text-anchor="middle" class="lbl">Gana votantes de… →</text>`;
+    // escala
+    const step = (() => { const t = val(mx) / 3, p = Math.pow(10, Math.floor(Math.log10(t))), m = t / p; return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p; })();
+    for (let g = -Math.floor(val(mx) / step) * step; g <= val(mx) + 1e-9; g += step) { const x = cx + half * (g / val(mx)); svg += `<line class="ax" x1="${x}" x2="${x}" y1="${tm - 8}" y2="${H}"/><text class="lbl" x="${x}" y="${tm - 12}" text-anchor="middle" font-size="10">${g === 0 ? '0' : (g > 0 ? '+' : '−') + (NB.unit === 'pct' ? fmt(Math.abs(g), step < 1 ? 1 : 0) : fint(Math.abs(g)))}</text>`; }
+    if (SEP) { const ys = tm + nP * (bh + gap) + SEP / 2 - gap / 2; svg += `<line x1="8" x2="${lw + pw + rm - 8}" y1="${ys}" y2="${ys}" stroke="var(--ink)" stroke-width="1.4" stroke-dasharray="5 3"/>`; }
+    const lum = h => { const n = parseInt(h.slice(1), 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255); };
+    data.forEach((d, i) => {
+      const y = yOf(i);
+      svg += `<text x="${lw - 10}" y="${y + bh / 2 + 4.5}" text-anchor="end" font-size="13" font-weight="600" style="${PN[d.a] ? 'fill:' + PN[d.a][1] : 'fill:var(--muted);font-style:italic'}">${esc(keyName(d.a))}</text>`;
+      let xn = cx, xp = cx;
+      const seg = (s, x, w) => { const col = keyColor(s.b), tc = lum(col) < 155 ? '#fff' : '#16202b';
+        let t = `<rect x="${x.toFixed(2)}" y="${y}" width="${Math.max(.5, w).toFixed(2)}" height="${bh}" fill="${col}" stroke="var(--panel)" stroke-width=".6"><title>${esc(keyName(d.a))} ${s.n > 0 ? 'gana' : 'pierde'} en neto ${lab(Math.abs(s.n)).replace(/^[+−]/, '')} ${s.n > 0 ? 'de' : 'frente a'} ${esc(keyName(s.b))} (recibe ${lab(f(s.b, d.a) / G).replace(/^[+−]/, '')}, cede ${lab(f(d.a, s.b) / G).replace(/^[+−]/, '')})</title></rect>`;
+        if (w >= (NB.unit === 'pct' ? 34 : 52)) t += `<text x="${x + w / 2}" y="${y + bh / 2 + 4}" text-anchor="middle" font-size="10.5" style="fill:${tc};pointer-events:none">${lab(s.n)}</text>`; return t; };
+      d.segs.filter(s => s.n < 0).forEach(s => { const w = half * (-s.n) / mx; xn -= w; svg += seg(s, xn, w); });
+      d.segs.filter(s => s.n > 0).forEach(s => { const w = half * s.n / mx; svg += seg(s, xp, w); xp += w; });
+      const sal = d.pos + d.neg, xs = cx + half * sal / mx;
+      svg += `<line x1="${xs}" x2="${xs}" y1="${y - 4}" y2="${y + bh + 4}" stroke="var(--ink)" stroke-width="2.6"/><circle cx="${xs}" cy="${y - 4}" r="2.6" fill="var(--ink)"/>`;
+      svg += `<text x="${lw + pw + 8}" y="${y + bh / 2 + 4.5}" font-size="13" font-weight="800" style="fill:${sal >= 0 ? 'var(--gain)' : 'var(--loss)'}">${lab(sal)}</text>`;
+    });
+    svg += `<text x="${lw + pw + 8}" y="${tm - 12}" font-size="10.5" font-weight="700" style="fill:var(--ink)">Saldo</text>`;
+    const legend = keys.filter(k => data.some(d => d.segs.some(s => s.b === k))).map(k => `<span><i style="background:${keyColor(k)}"></i>${esc(keyName(k))}</span>`).join('') + `<span><i style="background:var(--ink);width:3px"></i>Saldo neto</span>`;
+    box.innerHTML = `<div class="qtitle"><span class="eyebrow">Transferencia de votos netas · ${wLabel()}</span>
+      <span class="q">Saldo de votantes de cada opción frente a las demás, de ${esc(I.eleccion)} a ${esc(MESC[I.mes])} ${I.anyo}</span>
+      <span class="muted">A la derecha del cero, lo que cada fila gana en neto de cada opción (color de la opción de la que procede); a la izquierda, lo que pierde frente a cada una. La raya negra marca el saldo neto: llegadas menos fugas. Cifras en ${NB.unit === 'pct' ? 'puntos del censo' : `votos sobre un censo de ${fint(cen)} electores`}.${BAI.on && !NB.noX ? ' ' + BAINOTE : ''}</span></div>
+      <div class="legend">${legend}</div>
+      <div class="chart">${svgWrap(width, H + 4, svg)}</div>
+      <p class="note">Los nuevos votantes («No podía votar») solo aportan votantes, por eso aparecen como ganancias para todos y no tienen barra propia.${NB.noX ? ` ${BAI.on ? 'El BAI está oculto' : 'Blanco, abstención e indecisos están ocultos'}: el saldo no incluye lo que cada partido gana o pierde hacia ese bloque.` : ' Ojo: el BAI «pierde» mucho porque la ponderación ajusta la abstención recordada al dato real, mientras que en la intención la gente siempre declara que votará más de lo que luego vota.'}</p>`;
+  }
+
+  function renderReport() { repIdeoVote(); repTrHeat(); repTrBars(); repTrSankey(); repTrNet(); repTrNetBars(); repTrSankeyNet(); renderAffect(); renderLeaders(); }
   function initReport() {
     const c = $('#rep-ideo-ctl'); if (!c) return;
-    c.innerHTML = `<div class="seg" id="rpShape" role="group" aria-label="Forma del gráfico"><button data-s="area">Área suavizada</button><button data-s="cols">Columnas</button></div>
-      <label><input type="checkbox" id="rpNon" ${RP.nonvote ? 'checked' : ''}> Incluir abstención, blanco, nulo y NS/NC</label>
+    c.innerHTML = `<div class="seg" id="rpShape" role="group" aria-label="Forma del gráfico"><button data-s="area">Área suavizada</button><button data-s="cols">Columnas</button><button data-s="lines">Líneas</button></div>
+      <div class="seg" id="rpLab" role="group" aria-label="Qué indican las cifras"><button data-l="col">% de cada posición</button><button data-l="party">% sobre el total del partido</button></div>
+      <label><input type="checkbox" id="rpNon" ${RP.nonvote ? 'checked' : ''}> Incluir BAI (blanco, abstención, indecisos) y otros</label>
       <label><input type="checkbox" id="rpProp" ${RP.prop ? 'checked' : ''}> Ancho según el peso de cada posición</label>
       <label><input type="checkbox" id="rpDs" ${RP.dsmooth ? 'checked' : ''}> Suavizar también los datos</label>
       <label id="rpNsL"><input type="checkbox" id="rpNs" ${RP.ideoNs ? 'checked' : ''}> Columna NS/NC de ideología</label>`;
-    const sync = () => { document.querySelectorAll('#rpShape button').forEach(b => b.setAttribute('aria-pressed', b.dataset.s === RP.shape)); $('#rpNsL').hidden = RP.shape === 'area'; };
+    const sync = () => { document.querySelectorAll('#rpShape button').forEach(b => b.setAttribute('aria-pressed', b.dataset.s === RP.shape)); $('#rpNsL').hidden = RP.shape !== 'cols'; document.querySelectorAll('#rpLab button').forEach(b => b.setAttribute('aria-pressed', b.dataset.l === RP.lab)); };
+    $('#rpLab').onclick = e => { const b = e.target.closest('button'); if (!b) return; RP.lab = b.dataset.l; sync(); renderReport(); };
     $('#rpShape').onclick = e => { const b = e.target.closest('button'); if (!b) return; RP.shape = b.dataset.s; sync(); renderReport(); };
     $('#rpNon').onchange = e => { RP.nonvote = e.target.checked; renderReport(); };
     $('#rpProp').onchange = e => { RP.prop = e.target.checked; renderReport(); };
